@@ -214,17 +214,21 @@ const octx = off.getContext('2d'), img = octx.createImageData(W, H);
 function present() {
   needPresent = false;
   vctx.imageSmoothingEnabled = false;
-  if (sim.power !== 'awake') { vctx.fillStyle = '#000'; vctx.fillRect(0, 0, 720, 720); badge3d?.update(0); return; } // backlight off, panel asleep
+  // Real badge: backlight off and panel asleep in host sleep. At 1x we show that. When time is accelerated the
+  // sleep/wake cycle would strobe the screen, so we keep the dimmed Sleep frame visible at 10% instead.
+  const asleep = sim.power !== 'awake';
+  if (asleep && sim.speed <= 1) { vctx.fillStyle = '#000'; vctx.fillRect(0, 0, 720, 720); badge3d?.update(0); return; }
+  const level = asleep ? 10 : cz.cz_brightness();
   const fb = new Uint8Array(cz.memory.buffer, cz.cz_framebuffer(), W * H);
   const pal = new Uint16Array(cz.memory.buffer, cz.cz_palette(), NCOL);
   const rgb = Array.from(pal, v => [((v >> 11) & 31) * 255 / 31, ((v >> 5) & 63) * 255 / 63, (v & 31) * 255 / 31]);
   const d = img.data;
   for (let i = 0, o = 0; i < fb.length; i++, o += 4) { const c = rgb[fb[i]] || rgb[0]; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; }
   octx.putImageData(img, 0, 0);
-  badge3d?.update(cz.cz_brightness()); // after putImageData so the texture upload sees this frame
+  badge3d?.update(level); // after putImageData so the texture upload sees this frame
   vctx.drawImage(off, 0, 0, 720, 720);
   // shortcut: CSS approximation of backlight PWM, floored so 10% stays readable on a monitor
-  view.style.filter = `brightness(${0.35 + 0.65 * cz.cz_brightness() / 100})`;
+  view.style.filter = `brightness(${0.35 + 0.65 * level / 100})`;
 }
 
 // ---- 3D view: loaded on first use so the 2D sim never depends on the CDN
