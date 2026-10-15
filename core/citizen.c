@@ -33,7 +33,7 @@ static const char DEFAULT_PROMPT[] = "YOU ARE A SKEPTICAL OPS LEAD WHO EATS CLEA
 static struct {
     int creature, hearts, hatched, lost; /* lost: hearts lost since the last feed */
     int screen;
-    uint32_t hunger_ms, play_age_ms, screen_ms, idle_ms;
+    uint32_t hunger_ms, play_age_ms, screen_ms, idle_ms, anim_ms; /* anim_ms: free-running clock for idle animation */
     uint32_t last_now;
     int have_now;
     /* gesture */
@@ -68,7 +68,8 @@ static void age(uint32_t dt) {
     if (dt > AGE_CAP_MS) dt = AGE_CAP_MS;
     S.hunger_ms = S.hunger_ms + dt > AGE_CAP_MS ? AGE_CAP_MS : S.hunger_ms + dt;
     S.play_age_ms = S.play_age_ms + dt > AGE_CAP_MS ? AGE_CAP_MS : S.play_age_ms + dt;
-    while (S.hearts > 0 && S.hunger_ms >= (uint32_t)(S.lost + 1) * HEART_LOSS_MS) { S.hearts--; S.lost++; }
+    while (S.hearts > 0 && S.lost < 4 && S.hunger_ms >= (uint32_t)(S.lost + 1) * HEART_LOSS_MS) { S.hearts--; S.lost++; }
+    S.anim_ms += dt;
 }
 
 static int typed_len(void) {
@@ -83,6 +84,16 @@ static int prompt_len(void) { int n = 0; while (S.prompt[n]) n++; return n; }
 #define HATCH_Y_HIDDEN 188
 #define HATCH_Y_REST 100
 int cz_hatch_y = HATCH_Y_REST; /* read by screens.c */
+
+/* Idle breathing: the pet bobs 0,1,2,1 px on Home and Sulk every 600 ms, and every 1200 ms asleep. */
+#define BREATH_STEP_MS 600
+int cz_breath_dy = 0; /* read by screens.c */
+static int breath_dy(void) {
+    static const int table[4] = { 0, 1, 2, 1 };
+    uint32_t step = S.screen == CZ_S_SLEEP ? BREATH_STEP_MS * 2 : BREATH_STEP_MS;
+    if (S.screen != CZ_S_HOME && S.screen != CZ_S_SULK && S.screen != CZ_S_SLEEP) return 0;
+    return table[(S.anim_ms / step) & 3];
+}
 static int hatch_y(void) {
     uint32_t t = (uint32_t)prompt_len() * HATCH_CHAR_MS, u;
     if (S.screen_ms <= t) return HATCH_Y_HIDDEN;
@@ -135,6 +146,8 @@ static void play(void) {
     if (S.play_age_ms >= PLAY_GAP_MS) {
         if (S.hearts < 4) S.hearts++;
         S.play_age_ms = 0;
+        /* a heart earned by play lives a full window: rebase hunger to the start of the current one */
+        if (S.lost > 0) { S.lost--; if (S.hunger_ms > (uint32_t)S.lost * HEART_LOSS_MS) S.hunger_ms = (uint32_t)S.lost * HEART_LOSS_MS; }
     }
     go(CZ_S_PLAY);
 }
@@ -285,7 +298,8 @@ int cz_pose(void) {
 static uint32_t view_key(void) {
     return (uint32_t)S.screen | (uint32_t)S.hearts << 4 | (uint32_t)cz_pose() << 8 |
            (uint32_t)(S.screen == CZ_S_HATCH ? typed_len() : 0) << 12 |
-           (uint32_t)(S.screen == CZ_S_HATCH ? hatch_y() : 0) << 20;
+           (uint32_t)(S.screen == CZ_S_HATCH ? hatch_y() : 0) << 20 |
+           (uint32_t)breath_dy() << 28;
 }
 
 /* Home blink: only the pose changed, so redraw just the box where the idle and blink sprites differ. */
@@ -310,7 +324,10 @@ static void render_if_needed(void) {
     if (!S.stale && k == S.drawn_key) return;
     v.screen = S.screen; v.creature = S.creature; v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
     v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url;
+    cz_breath_dy = breath_dy();
     if (!S.stale && S.screen == CZ_S_HOME && (k ^ S.drawn_key) == (uint32_t)(CZ_IDLE ^ CZ_BLINK) << 8) clip_blink();
+    else if (!S.stale && (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK || S.screen == CZ_S_SLEEP) && ((k ^ S.drawn_key) & ~0x30000F00u) == 0)
+        cz_clip(56, 44, 2 * CZ_SPRITE, 2 * CZ_SPRITE + 2); /* only breath and/or pose moved: redraw the sprite box */
     cz_hatch_y = hatch_y();
     if (!S.stale && S.screen == CZ_S_HATCH && ((k ^ S.drawn_key) & 0xFFFFF) == 0) {
         /* only the rise moved: redraw the sprite box from the higher top down to the band (which hides the rest) */

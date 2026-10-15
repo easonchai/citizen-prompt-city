@@ -42,6 +42,7 @@ static void hearts(int n) {
     for (i = 0; i < 4; i++) cz_icon(i < n ? CZ_I_HEART : CZ_I_HEARTO, x0 + i * 18, 12, i < n ? CZ_C_CORAL : CZ_C_INK, 2);
 }
 
+extern int cz_breath_dy; /* idle bob, set by citizen.c */
 static void sprite(const struct cz_view *v, int x, int y) { cz_blit(cz_sprite(v->creature, v->pose), x, y, 2); }
 
 static void actions(int active) { /* active: icon id or -1 */
@@ -91,7 +92,7 @@ static void line_text(char *buf, const char *s, const uint8_t *ln) {
 
 static int slen(const char *s) { int n = 0; while (s[n]) n++; return n; }
 
-static void home(const struct cz_view *v) { skyline(); sprite(v, 56, 44); hearts(v->hearts); actions(-1); footer(v->name); }
+static void home(const struct cz_view *v) { skyline(); sprite(v, 56, 44 + cz_breath_dy); hearts(v->hearts); actions(-1); footer(v->name); }
 
 static void eat(const struct cz_view *v) {
     skyline(); sprite(v, 56, 44); hearts(v->hearts);
@@ -145,10 +146,10 @@ static void cheer(const struct cz_view *v) {
     banner("CHECKED IN", city);
 }
 
-static void sulk(const struct cz_view *v) { skyline(); sprite(v, 56, 44); hearts(v->hearts); actions(CZ_I_BOWL); footer("HUNGRY"); }
+static void sulk(const struct cz_view *v) { skyline(); sprite(v, 56, 44 + cz_breath_dy); hearts(v->hearts); actions(CZ_I_BOWL); footer("HUNGRY"); }
 
 static void sleep_(const struct cz_view *v) {
-    skyline(); cz_dim(60); sprite(v, 56, 44); cz_icon(CZ_I_ZZ, 168, 56, CZ_C_GOLD, 2); hearts(v->hearts); footer("ZZZ");
+    skyline(); cz_dim(60); sprite(v, 56, 44 + cz_breath_dy); cz_icon(CZ_I_ZZ, 168, 56, CZ_C_GOLD, 2); hearts(v->hearts); footer("ZZZ");
 }
 
 static void hatch(const struct cz_view *v) {

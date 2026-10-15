@@ -232,7 +232,7 @@ static void test_telemetry(void) {
         if (cz_dirty_rows(&y0, &y1)) {
             if (!blinks) printf("  blink frame dirty rows %d..%d (%d rows, pose %d)\n", y0, y1, y1 - y0 + 1, cz_pose());
             blinks++;
-            CHECK(y0 >= 44 && y1 <= 171 && y1 >= y0);
+            CHECK(y0 >= 44 && y1 <= 174 && y1 >= y0);
         }
     }
     CHECK(cz_screen() == CZ_S_HOME);
