@@ -214,17 +214,36 @@ const octx = off.getContext('2d'), img = octx.createImageData(W, H);
 function present() {
   needPresent = false;
   vctx.imageSmoothingEnabled = false;
-  if (sim.power !== 'awake') { vctx.fillStyle = '#000'; vctx.fillRect(0, 0, 720, 720); return; } // backlight off, panel asleep
+  if (sim.power !== 'awake') { vctx.fillStyle = '#000'; vctx.fillRect(0, 0, 720, 720); badge3d?.update(0); return; } // backlight off, panel asleep
   const fb = new Uint8Array(cz.memory.buffer, cz.cz_framebuffer(), W * H);
   const pal = new Uint16Array(cz.memory.buffer, cz.cz_palette(), NCOL);
   const rgb = Array.from(pal, v => [((v >> 11) & 31) * 255 / 31, ((v >> 5) & 63) * 255 / 63, (v & 31) * 255 / 31]);
   const d = img.data;
   for (let i = 0, o = 0; i < fb.length; i++, o += 4) { const c = rgb[fb[i]] || rgb[0]; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; }
   octx.putImageData(img, 0, 0);
+  badge3d?.update(cz.cz_brightness()); // after putImageData so the texture upload sees this frame
   vctx.drawImage(off, 0, 0, 720, 720);
   // shortcut: CSS approximation of backlight PWM, floored so 10% stays readable on a monitor
   view.style.filter = `brightness(${0.35 + 0.65 * cz.cz_brightness() / 100})`;
 }
+
+// ---- 3D view: loaded on first use so the 2D sim never depends on the CDN
+const VIEW_KEY = 'citizen-view';
+let badge3d = null;
+async function setView3d(on) {
+  if (on && !badge3d) {
+    try { badge3d = (await import('./badge3d.js')).create($('badge3d'), off); needPresent = true; }
+    catch (e) { fail(e); on = false; }
+  }
+  badge3d?.setActive(on);
+  $('bezel').hidden = on; $('badge3d').hidden = !on; $('note3d').hidden = !on;
+  $('view3d').textContent = on ? '2D' : '3D'; $('view3d').setAttribute('aria-pressed', on);
+}
+$('view3d').onclick = () => {
+  const on = $('badge3d').hidden;
+  try { localStorage.setItem(VIEW_KEY, on ? '3d' : '2d'); } catch {}
+  setView3d(on);
+};
 
 // Pointer input -> 240x240. Gesture timing runs in real time: the clock is held at 1x while a finger is down.
 const pos = e => { const r = view.getBoundingClientRect(); return [Math.round((e.clientX - r.left) / r.width * W), Math.round((e.clientY - r.top) / r.height * H)]; };
@@ -365,7 +384,17 @@ function frame(t) {
 }
 
 reset();
-if (new URLSearchParams(location.search).has('selftest')) selftest();
+// URL: ?scenario=desk|event|forgotten&speed=N&view=3d opens straight into a running demo
+const qs = new URLSearchParams(location.search);
+if (SCENARIOS[qs.get('scenario')]) runScenario(qs.get('scenario'));
+const qSpeed = +qs.get('speed');
+if (qs.has('speed') && qSpeed > 0 && Number.isFinite(qSpeed)) {
+  if (![...$('speed').options].some(o => +o.value === qSpeed)) $('speed').add(new Option(qSpeed + 'x', qSpeed));
+  setSpeed(qSpeed);
+}
+let storedView = null; try { storedView = localStorage.getItem(VIEW_KEY); } catch {}
+if ((qs.get('view') ?? storedView) === '3d') setView3d(true);
+if (qs.has('selftest')) selftest();
 requestAnimationFrame(frame);
 window.cz = cz; window.sim = { sim, hw, gesture, advanceTo, runScenario, toCsv: () => toCsv(record), importLog };
 

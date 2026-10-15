@@ -18,6 +18,7 @@ button label is clipped. (Use the iframe, not `--window-size=400`: desktop Chrom
 ## Files
 
 - `index.html`, `sim.js`: UI, wasm host, event-driven simulated clock.
+- `badge3d.js`: the 3D badge view (three.js, loaded lazily).
 - `model.js`: hardware model (frame cost, current, temperature, battery). Pure functions.
 - `hardware.json`: the ESP32-C3 profile. Every value is editable live under Nerd > Hardware constants.
 
@@ -25,6 +26,12 @@ button label is clipped. (Use the iframe, not `--window-size=400`: desktop Chrom
 
 - Badge: 240x240 at 3x, round mask and bezel. Mouse or finger: click = tap, drag = swipe, press 1 s = hold, two quick clicks = double tap.
   While a finger is down the clock runs at 1x, so gestures always use real time (S3).
+- 3D button (above the badge): swaps the round screen for a three.js model of the physical badge (ESP32-2424S012C in its stock
+  case) with the live framebuffer on its window. Drag or swipe to spin, double-click to reset; it auto-rotates when left alone.
+  Look only: touches on it never reach the core, use 2D (or the gesture buttons) for that. The choice is remembered in localStorage.
+  three.js 0.160.0 loads from cdnjs (OrbitControls from jsDelivr) on first use; the 2D sim does not need it.
+- URL parameters: `?scenario=desk|event|forgotten` starts that preset, `?speed=N` sets the speed (after the preset), `?view=3d`
+  opens the 3D view, e.g. http://localhost:8787/?view=3d&scenario=event&speed=60.
 - Gesture buttons inject raw touch sequences: Tap, Swipe, Hold, Double tap (cycles brightness 100/40/10).
 - Time: Pause, Step 1 s, Jump 1 h, speed 1x to 3600x. The core is ticked at 30 Hz of simulated time, like the firmware loop.
 - Content: creature, name, prompt, QR url, brightness, send message now, check in, save, reset, wake from deep sleep with slept seconds.

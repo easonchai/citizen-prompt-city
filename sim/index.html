@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,"><title>Citizen simulator</title>
+<script type="importmap">{"imports":{
+  "three":"https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
 :root{--bg:#0d1117;--panel:#161b22;--line:#2a313c;--fg:#e6edf3;--dim:#8b949e;--gold:#e8b04a;--teal:#3fb6a8}
 *{box-sizing:border-box}
@@ -27,10 +30,14 @@ dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}dt{color:va
 .legend{font-size:12px;color:var(--dim)}.legend b{font-weight:600}
 #hwfields{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 #selftest{white-space:pre-wrap;font:12px ui-monospace,monospace;color:var(--dim)}
+#badge3d{width:100%;aspect-ratio:1;display:block;border-radius:8px;touch-action:none;cursor:grab}
+#viewbar{display:flex;justify-content:space-between;align-items:center;gap:8px}
 [hidden]{display:none!important}
 </style></head><body>
 <div id="left">
+  <div id="viewbar"><span id="note3d" class="legend" hidden>3D view is for looking only: drag to spin, double-click to reset. Gestures work in 2D.</span><button id="view3d" aria-pressed="false" style="margin-left:auto">3D</button></div>
   <div id="bezel"><canvas id="screen" width="720" height="720"></canvas></div>
+  <canvas id="badge3d" width="720" height="720" hidden></canvas>
   <section>
     <h2>Gestures</h2>
     <div class="row g"><button data-g="tap">Tap</button><button data-g="swipe">Swipe</button><button data-g="hold">Hold</button><button data-g="double">Double tap</button></div>

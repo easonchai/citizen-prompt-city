@@ -9,7 +9,10 @@ HDRS    = $(wildcard core/*.h)
 LP     := (
 EXPORTS = $(shell grep -oE 'cz_[a-z_]+\$(LP)' core/citizen.h | sort -u | sed 's/.$$//; s/^/-Wl,--export=/')
 
-.PHONY: test wasm clean
+# bench and soak measure speed, so they build -O2 (the firmware is built -Os by Arduino)
+OPTFLAGS = $(subst -O1,-O2,$(CFLAGS))
+
+.PHONY: test wasm bench soak clean
 
 test: tests/test_core
 	@mkdir -p tests/out
@@ -17,6 +20,18 @@ test: tests/test_core
 
 tests/test_core: $(SRCS) $(HDRS) tests/test_core.c
 	$(CC) $(CFLAGS) -Icore -o $@ $(SRCS) tests/test_core.c
+
+bench: tests/bench_core
+	./tests/bench_core
+
+tests/bench_core: $(SRCS) $(HDRS) tests/bench_core.c
+	$(CC) $(OPTFLAGS) -Icore -o $@ $(SRCS) tests/bench_core.c
+
+soak: tests/soak_core
+	./tests/soak_core
+
+tests/soak_core: $(SRCS) $(HDRS) tests/soak_core.c
+	$(CC) $(OPTFLAGS) -Icore -o $@ $(SRCS) tests/soak_core.c
 
 wasm: sim/core.wasm
 
@@ -26,4 +41,4 @@ sim/core.wasm: $(SRCS) $(HDRS)
 	  -Wl,--no-entry $(EXPORTS) -o $@ $(SRCS)
 
 clean:
-	rm -rf tests/test_core tests/out sim/core.wasm
+	rm -rf tests/test_core tests/bench_core tests/soak_core tests/out sim/core.wasm
