@@ -1,0 +1,211 @@
+/* Native tests for the Citizen core. Run with `make test`. Writes every screen to tests/out/<screen>.ppm. */
+#include <stdio.h>
+#include <stdlib.h>
+#include "citizen.h"
+
+static uint32_t now;
+static int fails;
+
+#define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); fails++; } } while (0)
+
+static void run(uint32_t ms) { /* tick at 50 ms */
+    uint32_t end = now + ms;
+    while (now < end) { now += 50; cz_tick(now); }
+}
+
+static void tap(void) { cz_touch(CZ_TOUCH_DOWN, 120, 120, now); now += 100; cz_touch(CZ_TOUCH_UP, 121, 120, now); }
+
+static void boot(void) {
+    now = 1000;
+    cz_init(0, NULL, 0, 0);
+    cz_tick(now);
+    run(6000); /* hatch types the default prompt then holds */
+}
+
+static void check_and_write(const char *name) {
+    const uint8_t *fb = cz_framebuffer();
+    const uint16_t *pal = cz_palette();
+    char path[128];
+    FILE *f;
+    int i, bad = 0;
+    for (i = 0; i < CZ_W * CZ_H; i++) if (fb[i] == 0 || fb[i] >= CZ_C_COUNT) bad++;
+    if (bad) printf("FAIL %s: %d pixels outside 1..%d\n", name, bad, CZ_C_COUNT - 1);
+    fails += bad != 0;
+    snprintf(path, sizeof path, "tests/out/%s.ppm", name);
+    f = fopen(path, "wb");
+    if (!f) { printf("FAIL cannot write %s\n", path); fails++; return; }
+    fprintf(f, "P6\n%d %d\n255\n", CZ_W, CZ_H);
+    for (i = 0; i < CZ_W * CZ_H; i++) {
+        uint16_t c = pal[fb[i] < CZ_C_COUNT ? fb[i] : 0];
+        unsigned char rgb[3];
+        rgb[0] = (unsigned char)((c >> 11) * 255 / 31);
+        rgb[1] = (unsigned char)(((c >> 5) & 63) * 255 / 63);
+        rgb[2] = (unsigned char)((c & 31) * 255 / 31);
+        fwrite(rgb, 1, 3, f);
+    }
+    fclose(f);
+    printf("  wrote %s (screen %d, pose %d)\n", path, cz_screen(), cz_pose());
+}
+
+static void test_flow(void) {
+    int h;
+    now = 1000;
+    cz_init(0, NULL, 0, 0);
+    CHECK(cz_screen() == CZ_S_HATCH);
+    CHECK(cz_creature() == CZ_TAPIR);
+    cz_tick(now);
+    run(6000);
+    CHECK(cz_screen() == CZ_S_HOME);
+    CHECK(cz_hearts() == 3);
+
+    /* tap feeds */
+    tap();
+    CHECK(cz_screen() == CZ_S_FEED);
+    CHECK(cz_hearts() == 4);
+    CHECK(cz_hunger_ms() == 0);
+    run(3100);
+    CHECK(cz_screen() == CZ_S_HOME);
+
+    /* swipe plays */
+    cz_touch(CZ_TOUCH_DOWN, 80, 120, now);
+    now += 100; cz_touch(CZ_TOUCH_MOVE, 110, 121, now);
+    now += 100; cz_touch(CZ_TOUCH_MOVE, 140, 122, now);
+    now += 50; cz_touch(CZ_TOUCH_UP, 140, 122, now);
+    CHECK(cz_screen() == CZ_S_PLAY);
+    run(3100);
+    CHECK(cz_screen() == CZ_S_HOME);
+
+    /* hold 1000 ms shows QR, tap returns Home */
+    cz_touch(CZ_TOUCH_DOWN, 120, 120, now);
+    run(950);
+    CHECK(cz_screen() == CZ_S_HOME);
+    run(100);
+    CHECK(cz_screen() == CZ_S_QR);
+    cz_touch(CZ_TOUCH_UP, 120, 120, now);
+    CHECK(cz_screen() == CZ_S_QR);
+    tap();
+    CHECK(cz_screen() == CZ_S_HOME);
+
+    /* 30 s idle sleeps */
+    CHECK(!cz_wants_sleep());
+    run(29000);
+    CHECK(cz_screen() == CZ_S_HOME);
+    run(1100);
+    CHECK(cz_screen() == CZ_S_SLEEP);
+    CHECK(cz_wants_sleep());
+    tap();
+    CHECK(cz_screen() == CZ_S_HOME);
+    CHECK(!cz_wants_sleep());
+
+    /* 90 minutes without food loses a heart */
+    tap(); /* feed: hunger 0 */
+    h = cz_hearts();
+    run(89UL * 60000);
+    CHECK(cz_hearts() == h);
+    run(2UL * 60000);
+    CHECK(cz_hearts() == h - 1);
+
+    /* 6 h without food: sulk (it is asleep by now; a tap wakes it into Sulk) */
+    run(6UL * 3600000 - 91UL * 60000 + 1000);
+    CHECK(cz_hunger_ms() >= 6UL * 3600000);
+    CHECK(cz_screen() == CZ_S_SLEEP);
+    tap();
+    CHECK(cz_screen() == CZ_S_SULK);
+    tap(); /* feeding a sulking pet still works */
+    CHECK(cz_screen() == CZ_S_FEED);
+}
+
+static void test_save(void) {
+    uint8_t blob[CZ_SAVE_SIZE];
+    boot();
+    tap(); /* hunger 0, hearts 4 */
+    run(60UL * 60000);
+    CHECK(cz_hearts() == 4);
+    CHECK(cz_save(blob, 8) == 0);
+    CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
+    now = 5; /* host rebooted: monotonic clock restarts */
+    cz_init(0, blob, sizeof blob, 3600);
+    CHECK(cz_screen() == CZ_S_HOME);           /* hatched survives */
+    CHECK(cz_hunger_ms() == 2UL * 3600000);    /* 60 min awake + 60 min asleep */
+    CHECK(cz_hearts() == 3);                   /* crossed 90 min */
+    cz_tick(now);
+    run(31UL * 60000);
+    CHECK(cz_hearts() == 3);                   /* next loss at 180 min, not before */
+    run(30UL * 60000);
+    CHECK(cz_hearts() == 2);
+
+    blob[20] ^= 1; /* corrupt: checksum must reject it and hatch a new pet */
+    cz_init(0, blob, sizeof blob, 0);
+    CHECK(cz_screen() == CZ_S_HATCH);
+}
+
+static void test_screens(void) {
+    const uint8_t *fb;
+    now = 1000;
+    cz_init(0, NULL, 0, 0);
+    cz_tick(now);
+    run(1500);
+    check_and_write("hatch_typing");
+    run(2000);
+    check_and_write("hatch");
+    run(2000);
+    CHECK(cz_screen() == CZ_S_HOME);
+    CHECK(cz_dirty() == 1);
+    CHECK(cz_dirty() == 0);
+    check_and_write("home");
+    tap();
+    CHECK(cz_dirty() == 1);
+    check_and_write("eat");
+    run(3100);
+    cz_touch(CZ_TOUCH_DOWN, 60, 120, now); now += 200; cz_touch(CZ_TOUCH_UP, 160, 120, now);
+    CHECK(cz_screen() == CZ_S_PLAY);
+    check_and_write("play");
+    cz_message("What did you ship");
+    CHECK(cz_screen() == CZ_S_TALK);
+    check_and_write("talk");
+    run(8100);
+    cz_touch(CZ_TOUCH_DOWN, 120, 120, now); run(1100); cz_touch(CZ_TOUCH_UP, 120, 120, now);
+    CHECK(cz_screen() == CZ_S_QR);
+    check_and_write("qr");
+    tap();
+    cz_checkin("KL");
+    CHECK(cz_screen() == CZ_S_CHECKIN);
+    check_and_write("cheer");
+    run(4100);
+    run(31000);
+    CHECK(cz_screen() == CZ_S_SLEEP);
+    check_and_write("sleep");
+    run(7UL * 3600000);
+    tap();
+    CHECK(cz_screen() == CZ_S_SULK);
+    check_and_write("sulk");
+
+    cz_set_creature(CZ_HORNBILL);
+    tap(); run(3100); tap(); run(3100); /* two feeds lift it out of sulk */
+    CHECK(cz_screen() == CZ_S_HOME);
+    check_and_write("home_kenyalang");
+    cz_set_creature(CZ_TIGER);
+    check_and_write("home_harimau");
+
+    /* scratch buffer path used by the wasm host */
+    {
+        uint8_t *s = cz_scratch();
+        const char *n = "BUDI";
+        int i;
+        for (i = 0; n[i]; i++) s[i] = (uint8_t)n[i];
+        s[i] = 0;
+        cz_set_name((const char *)s);
+        CHECK(cz_dirty() == 1);
+    }
+    fb = cz_framebuffer();
+    CHECK(fb != NULL);
+}
+
+int main(void) {
+    test_flow();
+    test_save();
+    test_screens();
+    if (fails) { printf("%d check(s) failed\n", fails); return 1; }
+    printf("all core tests passed\n");
+    return 0;
+}

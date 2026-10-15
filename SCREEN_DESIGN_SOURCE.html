@@ -1,0 +1,153 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Citizen Screen</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+  /* spec sheet: navy ground, bare 240px discs in a 3x2 grid, 6px rhythm, 2px strokes, one pixel face at two sizes */
+  :root{--bg:#0d1226;--ink:#f6f1e4;--gold:#f0b840;--teal:#2bb8a8;--line:#22294a;--mute:#9aa0bd;--font:"JetBrains Mono",ui-monospace,monospace;--pixel:"Silkscreen",monospace}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)}
+  body{padding:54px 60px 60px;width:1024px}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:24px;border-bottom:2px solid var(--line);padding-bottom:18px;margin-bottom:12px}
+  h1{font-size:40px;margin:0;letter-spacing:.02em;font-family:var(--pixel)}
+  .spec{font-size:11px;letter-spacing:.04em;color:var(--mute);text-align:right;line-height:1.8}
+  .spec b{color:var(--gold);font-weight:400}
+  .swatches{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin:18px 0 54px}
+  .sw{display:flex;flex-direction:column;gap:6px}
+  .sw i{display:block;height:18px;box-shadow:inset 0 0 0 1px rgba(246,241,228,.35)}
+  .sw span{font-size:11px;color:var(--mute);white-space:nowrap}.sw span b{color:var(--ink);font-weight:500}
+  .grid{display:grid;grid-template-columns:repeat(3,240px);gap:36px 152px;justify-content:space-between}
+  .rowlab{grid-column:1/-1;font-size:11px;color:var(--mute);border-top:1px solid var(--line);padding-top:10px;margin-top:12px}.rowlab b{color:var(--gold);font-weight:500}
+  .unit{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .glass{width:240px;height:240px;border-radius:50%;overflow:hidden;background:#000;box-shadow:0 0 0 2px var(--line)}
+  canvas{width:240px;height:240px;image-rendering:pixelated;display:block}
+  .cap{font-size:12px;color:var(--gold);text-align:center;font-weight:500}
+  .cap small{display:block;color:var(--mute);margin-top:6px;font-size:12px;font-weight:400}
+  .film{margin-top:54px;border-top:2px solid var(--line);padding-top:18px}
+  .film .spec{margin-bottom:14px;display:block}
+  .strip{display:grid;grid-template-columns:repeat(8,128px);gap:0;width:1024px;margin-bottom:6px}
+  .strip img{width:128px;height:128px;image-rendering:pixelated;background:#141c3a;box-shadow:inset 0 0 0 1px var(--line);display:block}.strip .col{font-size:11px;color:var(--mute);padding:0 0 6px 2px}
+  .strip .lab{grid-column:1/-1;font-size:12px;color:var(--gold);font-weight:500;margin:12px 0 8px}
+  .export-mode body{padding:0;max-width:none}.export-mode header,.export-mode .swatches,.export-mode .film,.export-mode .cap,.export-mode .rowlab{display:none}.export-mode .grid{display:block}.export-mode .glass{border-radius:0;box-shadow:none}.export-mode .unit{gap:0;align-items:flex-start}
+</style>
+
+<header>
+  <h1>CITIZEN · KL</h1>
+  <div class="spec">240 × 240 round · 64 px source · 2× on device<br><b>tap</b> feed · <b>swipe</b> play · <b>hold</b> QR · <b>30s</b> sleep · <b>6h</b> sulk</div>
+</header>
+<div class="swatches" id="swatches"></div>
+
+<div class="grid" id="row"></div>
+
+<div class="film">
+  <span class="spec"><b>Frame strip</b> · 8 states · 64 px source · 2× on device</span>
+  <div class="strip" id="strip"></div>
+</div>
+
+<script>
+if(location.search.includes('export')){document.documentElement.classList.add('export-mode')}
+const W=240,H=240,CX=120,CY=120;
+// seven UI colours, one job each. Sprites add charcoal, pink and pale yellow inside the creature only.
+const C={navy:'#141c3a',dusk:'#1e2a58',deep:'#0a0e1f',ink:'#f6f1e4',gold:'#f0b840',coral:'#f06a5a',teal:'#2bb8a8'};
+const ROLES=[['navy','sky'],['dusk','horizon'],['deep','city + ground'],['ink','text + outlines'],['gold','windows + events'],['coral','hearts'],['teal','secondary'],['char','sprite only'],['pink','sprite only'],['pale','sprite only']];
+Object.assign(C,{char:'#2a2a2e',pink:'#f4a3b5',pale:'#ffe38a'});
+
+const F={A:'010,101,111,101,101',B:'110,101,110,101,110',C:'011,100,100,100,011',D:'110,101,101,101,110',E:'111,100,110,100,111',F:'111,100,110,100,100',G:'011,100,101,101,011',H:'101,101,111,101,101',I:'111,010,010,010,111',J:'001,001,001,101,010',K:'101,101,110,101,101',L:'100,100,100,100,111',M:'101,111,111,101,101',N:'110,101,101,101,101',O:'010,101,101,101,010',P:'110,101,110,100,100',Q:'010,101,101,111,011',R:'110,101,110,101,101',S:'011,100,010,001,110',T:'111,010,010,010,010',U:'101,101,101,101,111',V:'101,101,101,101,010',W:'101,101,111,111,101',X:'101,101,010,101,101',Y:'101,101,010,010,010',Z:'111,001,010,100,111',
+ '0':'010,101,101,101,010','1':'010,110,010,010,111','2':'110,001,010,100,111','3':'110,001,010,001,110','4':'101,101,111,001,001','5':'111,100,110,001,110','6':'011,100,110,101,010','7':'111,001,010,010,010','8':'010,101,010,101,010','9':'010,101,011,001,110',
+ ' ':'000,000,000,000,000','.':'000,000,000,000,010','·':'000,000,010,000,000',':':'000,010,000,010,000','#':'101,111,101,111,101','-':'000,000,111,000,000','+':'000,010,111,010,000','/':'001,001,010,100,100','!':'010,010,010,000,010','?':'110,001,010,000,010',"'":'010,010,000,000,000',',':'000,000,000,010,100'};
+function text(g,s,x,y,col,sc=2,align='left'){
+  s=s.toUpperCase(); const w=s.length*(4*sc)-sc;
+  if(align==='center')x=Math.round(x-w/2); if(align==='right')x=x-w;
+  g.fillStyle=col;
+  for(const ch of s){const rows=(F[ch]||F['?']).split(',');
+    rows.forEach((r,ry)=>[...r].forEach((b,rx)=>{if(b==='1')g.fillRect(x+rx*sc,y+ry*sc,sc,sc)}));
+    x+=4*sc;}
+  return w;
+}
+function px(g,col,pts,sc=1){g.fillStyle=col;for(const [x,y,w=1,h=1] of pts)g.fillRect(x*sc,y*sc,w*sc,h*sc)}
+function rect(g,col,x,y,w,h){g.fillStyle=col;g.fillRect(x,y,w,h)}
+const ICON={
+ heart:['01100110','11111111','11111111','11111111','01111110','00111100','00011000','00000000'],
+ heartO:['01100110','10011001','10000001','10000001','01000010','00100100','00011000','00000000'],
+ bowl:['00000000','00111100','01000010','11111111','01111110','00111100','00000000','00000000'],
+ ball:['00111100','01100110','11011111','10111111','11111111','11111111','01111110','00111100'],
+ bubble:['01111110','10000001','10000001','10000001','01111110','00001100','00001000','00000000'],
+ plug:['00100100','00100100','11111111','10000001','10000001','01111110','00011000','00011000'],
+ zz:['11110000','00100000','01000000','11110000','00001111','00000010','00000100','00001111'],
+};
+function icon(g,name,x,y,col,sc=2){const r=ICON[name];g.fillStyle=col;r.forEach((row,ry)=>[...row].forEach((b,rx)=>{if(b==='1')g.fillRect(x+rx*sc,y+ry*sc,sc,sc)}))}
+
+// KL at dusk. Horizon at y=156. Creature stands in front of the skyline, feet on the ground band.
+function skyline(g){
+  rect(g,C.navy,0,0,W,H);
+  rect(g,C.dusk,0,128,W,36);
+  px(g,C.ink,[[20,15],[35,9],[75,12],[95,20],[55,6],[100,35],[15,35]],2); // stars on the 2px grid
+  const s=C.deep;
+  rect(g,s,0,136,24,28); rect(g,s,24,144,14,20);
+  rect(g,s,40,118,16,46); rect(g,s,44,110,8,8); rect(g,s,46,106,4,4);         // Sultan Abdul Samad clock tower
+  rect(g,s,56,140,20,24); rect(g,s,76,148,10,16);
+  rect(g,s,148,92,10,72); rect(g,s,150,82,6,10); rect(g,s,152,72,2,10);        // Petronas twin 1
+  rect(g,s,168,92,10,72); rect(g,s,170,82,6,10); rect(g,s,172,72,2,10);        // Petronas twin 2
+  rect(g,s,158,122,10,2);                                                      // skybridge
+  rect(g,s,180,138,12,26); rect(g,s,192,146,16,18);
+  rect(g,s,218,108,4,56); rect(g,s,214,116,12,8); rect(g,s,216,112,8,4); rect(g,s,218,100,4,8); // KL Tower
+  rect(g,s,226,150,14,14);
+  px(g,C.gold,[[150,102],[154,112],[170,108],[174,130],[60,148],[66,154],[6,144],[184,144],[228,154],[150,136],[172,148],[46,122]],2); // lit windows + clock
+  rect(g,C.gold,0,164,W,2);                                                    // horizon
+  rect(g,C.deep,0,166,W,74);                                                   // ground
+  for(let y=168;y<240;y+=4)for(let x=(y/4)%2?0:2;x<W;x+=4)rect(g,C.navy,x,y,2,2); // 2-tone dither
+  }
+function hearts(g,n){const x0=CX-(4*18-2)/2; for(let i=0;i<4;i++)icon(g,i<n?'heart':'heartO',x0+i*18,12,i<n?C.coral:C.ink)}
+function mask(g){g.save();g.globalCompositeOperation='destination-in';g.fillStyle='#000';g.beginPath();g.arc(CX,CY,120,0,Math.PI*2);g.fill();g.restore()}
+function sprite(g,img,x=56,y=44){g.drawImage(img,x,y,128,128)}
+function actions(g,active){const names=['bowl','ball','bubble'];names.forEach((n,i)=>icon(g,n,68+i*40,176,n===active?C.gold:C.ink,3))}
+function footer(g,name){text(g,name,CX,208,C.gold,3,'center')}
+function banner(g,a,b){rect(g,C.gold,0,188,W,52);text(g,a,CX,194,C.deep,3,'center');if(b)text(g,b,CX,212,C.deep,2,'center')}
+
+const SCREENS={
+  home(g,S,cr){skyline(g);sprite(g,S.idle);hearts(g,3);actions(g);footer(g,cr.name)},
+  eat(g,S,cr){skyline(g);sprite(g,S.eat);hearts(g,4);text(g,'+1',40,100,C.gold,3,'center');banner(g,'NASI LEMAK','+1 HEART')},
+  play(g,S,cr){skyline(g);sprite(g,S.play);hearts(g,3);px(g,C.gold,[[26,44],[32,38],[40,34]],2);actions(g,'ball');footer(g,'PLAY')},
+  talk(g,S,cr){skyline(g);sprite(g,S.talk);hearts(g,3);
+    rect(g,C.ink,116,34,80,38);rect(g,C.navy,118,36,76,34);px(g,C.ink,[[124,72,8,2],[122,74,6,2],[120,76,4,2],[118,78,2,2]]);
+    text(g,'WHAT DID',124,40,C.ink,2);text(g,'YOU SHIP',124,54,C.ink,2);rect(g,C.gold,186,54,2,10);
+    banner(g,'REPLY','PRMPT.CITY/'+cr.name)},
+  qr(g,S,cr){skyline(g);g.fillStyle='rgba(10,14,31,.75)';g.fillRect(0,0,W,H);
+    const q=qrcode(0,'M');q.addData('https://prmpt.city/c/'+cr.name.toLowerCase());q.make();const n=q.getModuleCount();const m=4;const size=n*m;const ox=Math.round((W-size)/2),oy=44;
+    rect(g,C.ink,ox-8,oy-8,size+16,size+16);
+    for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(q.isDark(r,c))rect(g,C.deep,ox+c*m,oy+r*m,m,m);
+    g.drawImage(S.idle,22,124,64,64);banner(g,'SCAN TO CHAT','WITH '+cr.name)},
+  cheer(g,S,cr){skyline(g);sprite(g,S.cheer,56,64);hearts(g,4);
+    px(g,C.gold,[[20,24],[60,20],[24,40],[58,44],[34,18],[46,16]],3);px(g,C.coral,[[16,30],[64,34],[40,12]],3);
+    banner(g,'CHECKED IN','PROMPT:KL')},
+  sulk(g,S,cr){skyline(g);sprite(g,S.sulk);hearts(g,1);actions(g,'bowl');footer(g,'HUNGRY')},
+  sleep(g,S,cr){skyline(g);g.fillStyle='rgba(10,14,31,.6)';g.fillRect(0,0,W,H);sprite(g,S.sleep);icon(g,'zz',168,56,C.gold);hearts(g,2);footer(g,'ZZZ')},
+  hatch(g,S,cr){rect(g,C.deep,0,0,W,H);px(g,C.ink,[[20,15],[75,12],[100,35],[15,35]],2);
+    const lines=['YOU ARE A','SKEPTICAL','OPS LEAD','WHO EATS','CLEAN DATA'];lines.forEach((l,i)=>text(g,l,CX,28+i*16,C.ink,2,'center'));rect(g,C.gold,CX+44,28+4*16,2,10);
+    sprite(g,S.idle,56,100);banner(g,'HATCHING',cr.name)},
+};
+const CR={tapir:{name:'TENUK'},hornbill:{name:'KENYALANG'},tiger:{name:'HARIMAU'}};
+function load(name,state){return new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=`../sprites/${name}-${state}.png`})}
+
+(async()=>{
+  const sw=document.getElementById('swatches');
+  for(const [k,role] of ROLES){const d=document.createElement('div');d.className='sw';d.innerHTML=`<i style="background:${C[k]}"></i><span><b>${C[k]}</b> ${role}</span>`;sw.appendChild(d)}
+  const row=document.getElementById('row'),strip=document.getElementById('strip');
+  const plan=[['lab','<b>From Home</b> · one gesture each · thin ground line'],['tapir','home','Home','Tenuk, idle'],['hornbill','eat','Feed','tap'],['tiger','play','Play','swipe'],
+    ['lab','<b>Events</b> · something happened · gold band'],['tapir','talk','Talk','message from the chat page'],['tapir','qr','QR','hold 1s'],['tiger','cheer','Check-in','at the venue'],
+    ['lab','<b>Timers and boot</b>'],['hornbill','sulk','Sulk','6h without food'],['tapir','sleep','Sleep','30s idle'],['tapir','hatch','Hatch','first boot, prompt becomes pet']];
+  if(location.search.includes('export'))plan.push(['hornbill','home','Home','Kenyalang'],['tiger','home','Home','Harimau']);
+  for(const [cr,sc,cap,sub] of plan){
+    if(cr==='lab'){const l=document.createElement('div');l.className='rowlab';l.innerHTML=sc;row.appendChild(l);continue}
+    const S={idle:await load(cr,'IDLE'),eat:await load(cr,'EAT'),play:await load(cr,'PLAY'),talk:await load(cr,'TALK'),sleep:await load(cr,'SLEEP'),sulk:await load(cr,'SULK'),cheer:await load(cr,'CHEER')};
+    const c=document.createElement('canvas');c.width=W;c.height=H;c.id=`scr-${cr}-${sc}`;const g=c.getContext('2d');g.imageSmoothingEnabled=false;
+    SCREENS[sc](g,S,CR[cr]);mask(g);
+    const u=document.createElement('div');u.className='unit';
+    u.innerHTML=`<div class="glass"></div><div class="cap">${cap}<small>${sub}</small></div>`;
+    u.querySelector('.glass').appendChild(c);row.appendChild(u);
+  }
+  for(const cr of ['tapir','hornbill','tiger']){const l=document.createElement('div');l.className='lab';l.textContent=`${CR[cr].name} · ${cr}`;strip.appendChild(l);if(cr==='tapir')for(const st of ['IDLE','BLINK','EAT','PLAY','SLEEP','SULK','TALK','CHEER']){const h=document.createElement('div');h.className='col';h.textContent=st.toLowerCase();strip.appendChild(h)}
+    for(const st of ['IDLE','BLINK','EAT','PLAY','SLEEP','SULK','TALK','CHEER']){const i=new Image();i.src=`../sprites/${cr}-${st}.png`;i.title=st;strip.appendChild(i)}}
+  window.__ready=true;
+})();
+</script>
