@@ -15,7 +15,12 @@ void cz_blit(const uint8_t *spr, int x, int y, int scale);            /* 64x64, 
 int  cz_text(const char *s, int x, int y, int color, int scale, int align); /* returns width in px */
 int  cz_text_width(const char *s, int scale);
 void cz_icon(int icon, int x, int y, int color, int scale);
-void cz_dim(int alpha_pct);  /* blend the framebuffer toward DEEP by alpha_pct, snapped to the nearest palette colour */
+void cz_dim(int alpha_pct);  /* 2x2 ordered dither toward DEEP: alpha_pct of pixels per 2x2 cell become DEEP */
+void cz_clip(int x, int y, int w, int h);  /* every fill is clipped to this box; cz_clip(0, 0, CZ_W, CZ_H) resets */
+
+/* Telemetry kept by the primitives: rows touched since the last read, and cz_stat counters. */
+extern int cz_dy0, cz_dy1;   /* inclusive touched row span; cz_dy0 > cz_dy1 when nothing was touched */
+extern uint32_t cz_stats[CZ_STAT_COUNT];
 
 /* What screens.c needs to draw one frame; filled by citizen.c. */
 struct cz_view {

@@ -1,52 +1,107 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Citizen simulator</title>
+<link rel="icon" href="data:,"><title>Citizen simulator</title>
 <style>
-:root{--bg:#0d1117;--panel:#161b22;--line:#2a313c;--fg:#e6edf3;--dim:#8b949e;--gold:#e8b04a}
+:root{--bg:#0d1117;--panel:#161b22;--line:#2a313c;--fg:#e6edf3;--dim:#8b949e;--gold:#e8b04a;--teal:#3fb6a8}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif;display:flex;gap:40px;justify-content:center;align-items:flex-start;padding:32px;flex-wrap:wrap}
-#bezel{width:760px;height:760px;border-radius:50%;background:radial-gradient(#1b1b1b,#050505);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #222,0 20px 60px #000a;flex:none}
-#screen{width:720px;height:720px;border-radius:50%;display:block;touch-action:none;cursor:pointer;background:#000}
-#ctl{width:340px;display:flex;flex-direction:column;gap:14px}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,sans-serif;display:flex;gap:32px;justify-content:center;align-items:flex-start;padding:24px 16px;flex-wrap:wrap}
+#left{display:flex;flex-direction:column;gap:12px;width:min(760px,100%);min-width:0}
+#bezel{width:100%;aspect-ratio:1;border-radius:50%;background:radial-gradient(#1b1b1b,#050505);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #222,0 20px 60px #000a}
+#screen{width:94.7%;min-width:0;aspect-ratio:1;border-radius:50%;display:block;touch-action:none;cursor:pointer;background:#000;image-rendering:pixelated}
+#ctl{width:min(380px,100%);min-width:0;display:flex;flex-direction:column;gap:12px}
 h1{font-size:16px;margin:0;color:var(--gold);letter-spacing:.08em;text-transform:uppercase}
+h2{font-size:12px;margin:0;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
 section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px}
 label{color:var(--dim);font-size:12px;display:flex;flex-direction:column;gap:3px}
-input,select,textarea,button{background:#0d1117;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit}
+label.inline{flex-direction:row;align-items:center;gap:6px}
+input,select,textarea,button{background:#0d1117;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;min-width:0}
+input[type=checkbox]{width:auto}
 textarea{resize:vertical;height:56px}
-button{cursor:pointer}button:hover{border-color:var(--gold)}
-.row{display:flex;gap:8px}.row>*{flex:1}
+button{cursor:pointer}button:hover{border-color:var(--gold)}button.on{border-color:var(--gold);color:var(--gold)}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+.row.g>*{flex:1 1 140px} /* wraps the gesture buttons to two rows below ~600 px */
 dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}dt{color:var(--dim)}dd{margin:0;font-variant-numeric:tabular-nums}
 #err{color:#f85149}
+#status{color:var(--gold);font-variant-numeric:tabular-nums}
+#chart{width:100%;height:120px;background:#0d1117;border:1px solid var(--line);border-radius:6px}
+.legend{font-size:12px;color:var(--dim)}.legend b{font-weight:600}
+#hwfields{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#selftest{white-space:pre-wrap;font:12px ui-monospace,monospace;color:var(--dim)}
+[hidden]{display:none!important}
 </style></head><body>
-<div id="bezel"><canvas id="screen" width="720" height="720"></canvas></div>
+<div id="left">
+  <div id="bezel"><canvas id="screen" width="720" height="720"></canvas></div>
+  <section>
+    <h2>Gestures</h2>
+    <div class="row g"><button data-g="tap">Tap</button><button data-g="swipe">Swipe</button><button data-g="hold">Hold</button><button data-g="double">Double tap</button></div>
+    <h2>Time</h2>
+    <div class="row">
+      <button id="pause">Pause</button><button id="step">Step 1 s</button><button id="jump">Jump 1 h</button>
+      <select id="speed" aria-label="Speed"><option value="1">1x</option><option value="10">10x</option><option value="60">60x</option><option value="600">600x</option><option value="3600">3600x</option></select>
+    </div>
+    <div id="status"></div>
+  </section>
+</div>
 <div id="ctl">
   <h1>Citizen simulator</h1><div id="err"></div>
   <section>
     <dl>
-      <dt>Sim time</dt><dd id="r-time"></dd>
+      <dt>Sim clock</dt><dd id="r-time"></dd>
       <dt>Screen</dt><dd id="r-screen"></dd>
       <dt>Hearts</dt><dd id="r-hearts"></dd>
       <dt>Pose</dt><dd id="r-pose"></dd>
       <dt>Hunger</dt><dd id="r-hunger"></dd>
-      <dt>Wants sleep</dt><dd id="r-sleep"></dd>
-      <dt>Dirty/s</dt><dd id="r-fps"></dd>
+      <dt>Power</dt><dd id="r-power"></dd>
+      <dt>Brightness</dt><dd id="r-bright"></dd>
     </dl>
-    <label>Speed <select id="speed"><option value="1">1x</option><option value="10">10x</option><option value="60">60x</option><option value="600">600x</option><option value="3600">3600x</option></select></label>
   </section>
   <section>
+    <h2>Scenarios</h2>
+    <div class="row"><button data-sc="desk">Desk day</button><button data-sc="event">Event day</button><button data-sc="forgotten">Forgotten</button></div>
+    <div class="row">
+      <label>Interactions / h <input id="rate" type="number" min="0" value="0"></label>
+      <label>Host sleep <select id="sleepmode"><option value="deep">Deep (F4)</option><option value="light">Light (F4 fallback)</option><option value="none">None</option></select></label>
+    </div>
+  </section>
+  <section>
+    <h2>Content</h2>
     <label>Creature <select id="creature"><option value="0">Tapir</option><option value="1">Hornbill</option><option value="2">Tiger</option></select></label>
     <label>Name <input id="name" value="TENUK" maxlength="10"></label>
     <label>Prompt <textarea id="prompt">You are a skeptical ops lead who eats clean data.</textarea></label>
     <label>QR url <input id="qr" value="https://prmpt.city/c/tenuk"></label>
+    <label>Brightness <select id="bright"><option>100</option><option>40</option><option>10</option></select></label>
     <button id="apply">Apply content</button>
-  </section>
-  <section>
     <label>Message <input id="msg" value="Welcome to KL!"></label>
-    <div class="row"><button id="send">Send message</button><button id="checkin">Check in (KL)</button></div>
+    <div class="row"><button id="send">Send now</button><button id="checkin">Check in (KL)</button></div>
     <div class="row"><button id="save">Save</button><button id="reset">Reset</button></div>
     <label>Slept seconds <input id="slept" type="number" value="3600" min="0"></label>
-    <button id="wake">Wake from sleep</button>
+    <button id="wake">Wake from deep sleep</button>
   </section>
+  <section>
+    <h2>WiFi</h2>
+    <div class="row">
+      <label class="inline"><input id="wifi" type="checkbox"> Connected</label>
+      <label>Sync every (s) <input id="sync" type="number" min="1" value="60"></label>
+    </div>
+    <label>Message from the web (delivered on next sync) <input id="webmsg" value="Nice talk!"></label>
+    <div class="row"><button id="queue">Queue message</button><button id="queuecheckin">Queue check-in</button></div>
+    <label>Live mode: badge url (polls &lt;url&gt;/state every 10 s real time) <input id="liveurl" value="https://prmpt.city/api/c/tenuk"></label>
+    <label class="inline"><input id="live" type="checkbox"> Live mode</label>
+    <div id="wifistatus" class="legend"></div>
+  </section>
+  <button id="nerd">Nerd</button>
+  <section id="nerdpanel" hidden>
+    <h2>Telemetry</h2>
+    <dl id="tele"></dl>
+    <canvas id="chart" width="700" height="220"></canvas>
+    <div class="legend"><b style="color:var(--gold)">model</b> frame ms per second, <b style="color:var(--teal)">imported</b> firmware frame ms</div>
+    <div class="row"><button id="record">Record</button><button id="export">Export CSV</button></div>
+    <label>Import firmware serial log (F3 JSON lines) <input id="import" type="file" accept=".txt,.log,.jsonl,.json"></label>
+    <div id="calib" class="legend"></div>
+    <h2>Hardware constants</h2>
+    <div id="hwfields"></div>
+  </section>
+  <pre id="selftest" hidden></pre>
 </div>
 <script type="module" src="sim.js"></script>
 </body></html>

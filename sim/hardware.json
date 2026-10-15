@@ -1,0 +1,23 @@
+{
+  "profile": "ESP32-C3 / ESP32-2424S012C (est., uncalibrated)",
+  "spi_hz": 40000000,
+  "chunk_rows": 8,
+  "chunk_overhead_us": 40,
+  "core_calibration": 2.5,
+  "fps_cap": 30,
+  "ma_mcu_active": 20,
+  "ma_wifi_idle": 30,
+  "ma_wifi_tx_burst": 300,
+  "wifi_tx_burst_ms": 200,
+  "sync_interval_s": 60,
+  "ma_light_sleep": 0.13,
+  "ma_deep_sleep": 0.005,
+  "ma_panel": 8,
+  "ma_backlight_full": 25,
+  "supply_v": 5,
+  "thermal_c_per_w": 30,
+  "ambient_c": 30,
+  "battery_mah": 300,
+  "heap_free_bytes": 219980,
+  "rssi_dbm": -60
+}

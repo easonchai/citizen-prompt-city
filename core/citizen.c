@@ -14,6 +14,7 @@
 #define SWIPE_MS 600
 #define SWIPE_PX 40
 #define HOLD_MS 1000
+#define DOUBLE_TAP_MS 400
 #define HATCH_CHAR_MS 60
 #define HATCH_HOLD_MS 2000
 #define BLINK_EVERY_MS 4000
@@ -24,7 +25,7 @@
 
 #define SAVE_MAGIC0 'C'
 #define SAVE_MAGIC1 'Z'
-#define SAVE_VERSION 1
+#define SAVE_VERSION 2
 
 static const char *const DEFAULT_NAME[CZ_CREATURES] = {"TENUK", "KENYALANG", "HARIMAU"};
 static const char DEFAULT_PROMPT[] = "YOU ARE A SKEPTICAL OPS LEAD WHO EATS CLEAN DATA";
@@ -36,8 +37,9 @@ static struct {
     uint32_t last_now;
     int have_now;
     /* gesture */
-    int down, consumed, x0, y0, maxd;
-    uint32_t t0;
+    int down, consumed, x0, y0, maxd, tapped; /* tapped: last_tap is a tap that can start a double tap */
+    uint32_t t0, last_tap;
+    int brightness;
     /* content */
     char name[NAME_MAX + 1], prompt[CZ_PROMPT_MAX + 1], msg[CZ_MSG_MAX + 1], city[CITY_MAX + 1], url[URL_MAX + 1];
     /* rendering */
@@ -76,6 +78,17 @@ static int typed_len(void) {
 }
 
 static int prompt_len(void) { int n = 0; while (S.prompt[n]) n++; return n; }
+
+/* Hatch sprite top: 188 (under the band) while typing, then quadratic ease-out to 100 over the hold. */
+#define HATCH_Y_HIDDEN 188
+#define HATCH_Y_REST 100
+int cz_hatch_y = HATCH_Y_REST; /* read by screens.c */
+static int hatch_y(void) {
+    uint32_t t = (uint32_t)prompt_len() * HATCH_CHAR_MS, u;
+    if (S.screen_ms <= t) return HATCH_Y_HIDDEN;
+    u = S.screen_ms - t >= HATCH_HOLD_MS ? 0 : HATCH_HOLD_MS - (S.screen_ms - t);
+    return HATCH_Y_REST + (int)((HATCH_Y_HIDDEN - HATCH_Y_REST) * u * u / ((uint32_t)HATCH_HOLD_MS * HATCH_HOLD_MS));
+}
 
 static uint32_t event_ms(int screen) {
     switch (screen) {
@@ -126,9 +139,16 @@ static void play(void) {
     go(CZ_S_PLAY);
 }
 
-static void gesture_tap(void) {
+static void gesture_tap(uint32_t now) {
+    if (S.tapped && now - S.last_tap < DOUBLE_TAP_MS) { /* second tap: brightness only, no tap action */
+        S.tapped = 0;
+        S.brightness = S.brightness == 100 ? 40 : S.brightness == 40 ? 10 : 100;
+        return;
+    }
+    S.tapped = 1;
+    S.last_tap = now;
     if (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) feed();
-    else if (S.screen == CZ_S_SLEEP || S.screen == CZ_S_QR) go(base_screen());
+    else if (S.screen != CZ_S_HATCH) go(base_screen()); /* Sleep, QR and every event screen */
 }
 
 static void gesture_swipe(void) {
@@ -150,14 +170,14 @@ void cz_touch(int kind, int x, int y, uint32_t now_ms) {
     if (d > S.maxd) S.maxd = d;
     if (!S.consumed && dx >= SWIPE_PX && now_ms - S.t0 <= SWIPE_MS) { S.consumed = 1; gesture_swipe(); }
     if (kind == CZ_TOUCH_UP) {
-        if (!S.consumed && now_ms - S.t0 < TAP_MS && S.maxd < TAP_PX) gesture_tap();
+        if (!S.consumed && now_ms - S.t0 < TAP_MS && S.maxd < TAP_PX) gesture_tap(now_ms);
         S.down = 0;
     }
 }
 
 void cz_tick(uint32_t now_ms) { advance(now_ms); }
 
-/* ---- save blob: magic(2) version creature hearts hatched lost pad hunger_s(4) play_s(4) name(11) ... crc(4) at the end */
+/* ---- save blob: magic(2) version creature hearts hatched lost brightness hunger_s(4) play_s(4) name(11) ... crc(4) at the end */
 static uint32_t checksum(const uint8_t *p, int n) { /* FNV-1a */
     uint32_t h = 2166136261UL;
     while (n--) { h ^= *p++; h *= 16777619UL; }
@@ -173,6 +193,7 @@ int cz_save(uint8_t *out, int cap) {
     for (i = 0; i < CZ_SAVE_SIZE; i++) out[i] = 0;
     out[0] = SAVE_MAGIC0; out[1] = SAVE_MAGIC1; out[2] = SAVE_VERSION;
     out[3] = (uint8_t)S.creature; out[4] = (uint8_t)S.hearts; out[5] = (uint8_t)S.hatched; out[6] = (uint8_t)S.lost;
+    out[7] = (uint8_t)S.brightness;
     put32(out + 8, S.hunger_ms / 1000);
     put32(out + 12, S.play_age_ms / 1000);
     for (i = 0; i < NAME_MAX && S.name[i]; i++) out[16 + i] = (uint8_t)S.name[i];
@@ -183,8 +204,8 @@ int cz_save(uint8_t *out, int cap) {
 static int restore(const uint8_t *b, int len) {
     if (!b || len < CZ_SAVE_SIZE || b[0] != SAVE_MAGIC0 || b[1] != SAVE_MAGIC1 || b[2] != SAVE_VERSION) return 0;
     if (get32(b + CZ_SAVE_SIZE - 4) != checksum(b, CZ_SAVE_SIZE - 4)) return 0;
-    if (b[3] >= CZ_CREATURES || b[4] > 4 || b[6] > 4) return 0;
-    S.creature = b[3]; S.hearts = b[4]; S.hatched = b[5] != 0; S.lost = b[6];
+    if (b[3] >= CZ_CREATURES || b[4] > 4 || b[6] > 4 || (b[7] != 100 && b[7] != 40 && b[7] != 10)) return 0;
+    S.creature = b[3]; S.hearts = b[4]; S.hatched = b[5] != 0; S.lost = b[6]; S.brightness = b[7];
     S.hunger_ms = get32(b + 8) > AGE_CAP_MS / 1000 ? AGE_CAP_MS : get32(b + 8) * 1000;
     S.play_age_ms = get32(b + 12) > AGE_CAP_MS / 1000 ? AGE_CAP_MS : get32(b + 12) * 1000;
     copy(S.name, NAME_MAX + 1, (const char *)b + 16); /* bytes 16..26 always end in 0 */
@@ -206,6 +227,8 @@ void cz_init(uint32_t seed, const uint8_t *saved, int saved_len, uint32_t slept_
     copy(S.prompt, sizeof S.prompt, DEFAULT_PROMPT);
     copy(S.city, sizeof S.city, "KL");
     S.stale = 1;
+    S.brightness = 100;
+    for (i = 0; i < CZ_STAT_COUNT; i++) cz_stats[i] = 0;
     if (restore(saved, saved_len)) {
         if (slept_seconds > AGE_CAP_MS / 1000) slept_seconds = AGE_CAP_MS / 1000;
         age(slept_seconds * 1000);
@@ -227,6 +250,8 @@ void cz_set_creature(int creature) {
 }
 void cz_set_name(const char *name) { copy(S.name, sizeof S.name, name); S.stale = 1; }
 void cz_set_prompt(const char *prompt) { copy(S.prompt, sizeof S.prompt, prompt); S.stale = 1; }
+int cz_brightness(void) { return S.brightness; }
+void cz_set_brightness(int pct) { if (pct == 100 || pct == 40 || pct == 10) S.brightness = pct; }
 void cz_set_qr_url(const char *url) { copy(S.url, sizeof S.url, url); S.stale = 1; }
 
 void cz_message(const char *text) {
@@ -259,7 +284,24 @@ int cz_pose(void) {
 /* Everything the picture depends on that changes with time; setters mark S.stale instead. */
 static uint32_t view_key(void) {
     return (uint32_t)S.screen | (uint32_t)S.hearts << 4 | (uint32_t)cz_pose() << 8 |
-           (uint32_t)(S.screen == CZ_S_HATCH ? typed_len() : 0) << 12;
+           (uint32_t)(S.screen == CZ_S_HATCH ? typed_len() : 0) << 12 |
+           (uint32_t)(S.screen == CZ_S_HATCH ? hatch_y() : 0) << 20;
+}
+
+/* Home blink: only the pose changed, so redraw just the box where the idle and blink sprites differ. */
+static void clip_blink(void) {
+    const uint8_t *a = cz_sprite(S.creature, CZ_IDLE), *b = cz_sprite(S.creature, CZ_BLINK);
+    int x, y, x0 = CZ_SPRITE, y0 = CZ_SPRITE, x1 = -1, y1 = -1;
+    for (y = 0; y < CZ_SPRITE; y++)
+        for (x = 0; x < CZ_SPRITE; x++)
+            if (a[y * CZ_SPRITE + x] != b[y * CZ_SPRITE + x]) {
+                if (x < x0) x0 = x;
+                if (x > x1) x1 = x;
+                if (y < y0) y0 = y;
+                if (y > y1) y1 = y;
+            }
+    /* sprite drawn at (56, 44), scale 2 by home() in screens.c; an identical pair clips to nothing */
+    cz_clip(56 + 2 * x0, 44 + 2 * y0, 2 * (x1 - x0 + 1), 2 * (y1 - y0 + 1));
 }
 
 static void render_if_needed(void) {
@@ -268,7 +310,16 @@ static void render_if_needed(void) {
     if (!S.stale && k == S.drawn_key) return;
     v.screen = S.screen; v.creature = S.creature; v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
     v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url;
+    if (!S.stale && S.screen == CZ_S_HOME && (k ^ S.drawn_key) == (uint32_t)(CZ_IDLE ^ CZ_BLINK) << 8) clip_blink();
+    cz_hatch_y = hatch_y();
+    if (!S.stale && S.screen == CZ_S_HATCH && ((k ^ S.drawn_key) & 0xFFFFF) == 0) {
+        /* only the rise moved: redraw the sprite box from the higher top down to the band (which hides the rest) */
+        int y0 = (int)(S.drawn_key >> 20) < cz_hatch_y ? (int)(S.drawn_key >> 20) : cz_hatch_y;
+        cz_clip(56, y0, 2 * CZ_SPRITE, HATCH_Y_HIDDEN - y0);
+    }
     cz_draw(&v);
+    cz_clip(0, 0, CZ_W, CZ_H);
+    cz_stats[CZ_STAT_FRAMES]++;
     S.drawn_key = k;
     S.stale = 0;
     S.dirty = 1;
@@ -276,7 +327,17 @@ static void render_if_needed(void) {
 
 const uint8_t *cz_framebuffer(void) { render_if_needed(); return cz_fb; }
 const uint16_t *cz_palette(void) { return cz_pal565; }
-int cz_dirty(void) { int d; render_if_needed(); d = S.dirty; S.dirty = 0; return d; }
+int cz_dirty_rows(int *y0, int *y1) {
+    int d;
+    render_if_needed();
+    d = S.dirty;
+    if (d) { *y0 = cz_dy0; *y1 = cz_dy1; }
+    S.dirty = 0;
+    cz_dy0 = CZ_H; cz_dy1 = -1;
+    return d;
+}
+int cz_dirty(void) { int y0, y1; return cz_dirty_rows(&y0, &y1); }
+uint32_t cz_stat(int which) { return which >= 0 && which < CZ_STAT_COUNT ? cz_stats[which] : 0; }
 int cz_wants_sleep(void) { return S.screen == CZ_S_SLEEP; }
 
 int cz_screen(void) { return S.screen; }

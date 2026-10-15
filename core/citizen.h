@@ -51,6 +51,15 @@ const uint16_t *cz_palette(void);              /* CZ_C_COUNT RGB565 values */
 int  cz_dirty(void);                           /* 1 if the framebuffer changed since the last cz_dirty call */
 int  cz_wants_sleep(void);                     /* 1 when the host may deep sleep; wake on touch and call cz_init with the save blob */
 
+/* Telemetry for hosts (firmware pushes only dirty rows; the simulator models SPI cost from them). */
+int  cz_dirty_rows(int *y0, int *y1);          /* like cz_dirty, but also returns the inclusive row span touched; resets */
+enum cz_stat { CZ_STAT_FRAMES = 0, CZ_STAT_PIXELS_FILLED, CZ_STAT_SPRITE_PIXELS, CZ_STAT_TEXT_GLYPHS, CZ_STAT_COUNT };
+uint32_t cz_stat(int which);                   /* monotonic counters since init */
+
+/* Brightness: 100, 40 or 10. Double tap cycles it. The host drives the backlight. */
+int  cz_brightness(void);
+void cz_set_brightness(int pct);
+
 /* Introspection for the simulator and tests. */
 int  cz_screen(void);
 int  cz_hearts(void);                          /* 0..4 */

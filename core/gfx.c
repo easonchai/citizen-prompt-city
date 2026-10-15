@@ -1,6 +1,11 @@
 #include "gfx.h"
 
 uint8_t cz_fb[CZ_W * CZ_H];
+int cz_dy0 = CZ_H, cz_dy1 = -1;
+uint32_t cz_stats[CZ_STAT_COUNT];
+static int clx0, cly0, clx1 = CZ_W, cly1 = CZ_H;
+
+void cz_clip(int x, int y, int w, int h) { clx0 = x; cly0 = y; clx1 = x + w; cly1 = y + h; }
 
 /* RGB from the JS palette C{} (same as tools/pack_sprites.py). Index 0 is sprite transparency, never drawn. */
 const uint8_t cz_pal_rgb[CZ_C_COUNT][3] = {
@@ -26,10 +31,14 @@ const uint16_t cz_pal565[CZ_C_COUNT] = {
 
 void cz_rect(int x, int y, int w, int h, int color) {
     int x1 = x + w, y1 = y + h, i, j;
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    if (x1 > CZ_W) x1 = CZ_W;
-    if (y1 > CZ_H) y1 = CZ_H;
+    if (x < clx0) x = clx0;
+    if (y < cly0) y = cly0;
+    if (x1 > clx1) x1 = clx1;
+    if (y1 > cly1) y1 = cly1;
+    if (x >= x1 || y >= y1) return;
+    if (y < cz_dy0) cz_dy0 = y;
+    if (y1 - 1 > cz_dy1) cz_dy1 = y1 - 1;
+    cz_stats[CZ_STAT_PIXELS_FILLED] += (uint32_t)((x1 - x) * (y1 - y));
     for (j = y; j < y1; j++)
         for (i = x; i < x1; i++) cz_fb[j * CZ_W + i] = (uint8_t)color;
 }
@@ -39,7 +48,7 @@ void cz_blit(const uint8_t *spr, int x, int y, int scale) {
     for (sy = 0; sy < CZ_SPRITE; sy++)
         for (sx = 0; sx < CZ_SPRITE; sx++) {
             uint8_t c = spr[sy * CZ_SPRITE + sx];
-            if (c) cz_rect(x + sx * scale, y + sy * scale, scale, scale, c);
+            if (c) { cz_stats[CZ_STAT_SPRITE_PIXELS]++; cz_rect(x + sx * scale, y + sy * scale, scale, scale, c); }
         }
 }
 
@@ -84,6 +93,7 @@ int cz_text(const char *s, int x, int y, int color, int scale, int align) {
     while (*p) {
         int ch = next_char(&p), g = FONT_QMARK, i, rx, ry;
         for (i = 0; i < FONT_N; i++) if (FONT[i].ch == ch) { g = i; break; }
+        cz_stats[CZ_STAT_TEXT_GLYPHS]++;
         for (ry = 0; ry < 5; ry++)
             for (rx = 0; rx < 3; rx++)
                 if (FONT[g].rows[ry] & (4 >> rx)) cz_rect(x + rx * scale, y + ry * scale, scale, scale, color);
@@ -109,19 +119,14 @@ void cz_icon(int icon, int x, int y, int color, int scale) {
             if (ICONS[icon][ry] & (0x80 >> rx)) cz_rect(x + rx * scale, y + ry * scale, scale, scale, color);
 }
 
+/* Bayer 2x2 thresholds in percent: a cell turns DEEP where a > threshold, so the scene keeps its own
+ * colours on the remaining pixels and DEEP buildings stay distinct from the dithered sky. */
 void cz_dim(int a) {
-    uint8_t lut[CZ_C_COUNT];
-    int i, k, j;
-    for (i = 0; i < CZ_C_COUNT; i++) {
-        int t[3], best = CZ_C_DEEP;
-        long bd = 0x7fffffffL;
-        for (k = 0; k < 3; k++) t[k] = (cz_pal_rgb[i][k] * (100 - a) + cz_pal_rgb[CZ_C_DEEP][k] * a) / 100;
-        for (j = 1; j < CZ_C_COUNT; j++) {
-            long d = 0;
-            for (k = 0; k < 3; k++) d += (long)(t[k] - cz_pal_rgb[j][k]) * (t[k] - cz_pal_rgb[j][k]);
-            if (d < bd) { bd = d; best = j; }
-        }
-        lut[i] = (uint8_t)best;
-    }
-    for (i = 0; i < CZ_W * CZ_H; i++) cz_fb[i] = lut[cz_fb[i]];
+    static const int bayer[2][2] = {{12, 62}, {87, 37}};
+    int x, y;
+    for (y = 0; y < CZ_H; y++)
+        for (x = 0; x < CZ_W; x++)
+            if (a > bayer[y & 1][x & 1]) cz_fb[y * CZ_W + x] = CZ_C_DEEP;
+    cz_dy0 = 0;
+    cz_dy1 = CZ_H - 1;
 }

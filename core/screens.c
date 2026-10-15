@@ -4,6 +4,8 @@
 
 #define CX 120
 
+extern int cz_hatch_y; /* sprite top on Hatch, set by citizen.c from the screen timer */
+
 static void px2(int color, const uint8_t (*pts)[2], int n, int sc) {
     int i;
     for (i = 0; i < n; i++) cz_rect(pts[i][0] * sc, pts[i][1] * sc, sc, sc, color);
@@ -164,7 +166,7 @@ static void hatch(const struct cz_view *v) {
         w = cz_text(buf, CX, y, CZ_C_INK, 2, CZ_CENTER);
     }
     cz_rect(CX - w / 2 + w + 5, y, 2, 10, CZ_C_GOLD);
-    sprite(v, 56, 100);
+    sprite(v, 56, cz_hatch_y); /* drawn before the band, so it rises from under it */
     banner("HATCHING", v->name);
 }
 
