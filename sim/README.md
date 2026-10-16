@@ -79,3 +79,32 @@ Everything on the wheel is core behaviour (`core/citizen.c`), not simulator code
 | `?selftest` | Runs the acceptance checks once on load and prints the result (see Selftest). |
 
 They combine, for example http://localhost:8791/?view=3d&scenario=event&speed=60.
+
+## Time
+
+The simulator keeps its own clock in simulated milliseconds and advances it event by event: the core is ticked at
+30 Hz of simulated time (every 33.3 ms, the most the firmware loop draws), and the loop also stops at the next
+scheduled tap, sync, clock set, update arrival and one-second telemetry boundary. Between `requestAnimationFrame`
+calls at most 250 ms of real time is consumed, so a backgrounded tab does not jump hours when it returns.
+
+- Pause: freezes simulated time. Gestures still work while paused because a finger forces 1x.
+- Step 1 s and Jump 1 h: advance exactly that much simulated time, even while paused.
+- Speed: 1x, 10x, 60x, 600x or 3600x. One real second at 3600x is one simulated hour.
+
+The status line under the buttons shows the current speed (or `paused`, or `1x` while a finger is down), the
+scenario name and progress, `recording N s` while telemetry is being recorded, `message queued` when a web message
+is waiting for a sync, and `request ...` after the core asked the host for something.
+
+## Readouts
+
+The box at the top of the right column refreshes every frame:
+
+- Sim clock: simulated time since the page loaded (h, m, s).
+- Screen: the core's current screen (HATCH, HOME, FEED, PLAY, TALK, QR, CHECKIN, SULK, SLEEP, SETTINGS), or
+  `off (deep sleep)` when the host has powered the core down.
+- Hearts: 0 to 4.
+- Pose: the sprite pose (IDLE, BLINK, EAT, PLAY, SLEEP, SULK, TALK, CHEER).
+- Hunger: minutes and seconds since the last feed.
+- Power: `awake`, `light` or `deep`, plus `WiFi` when connected and `USB powered` in the desk scenario.
+- Badge clock: the core's own wall clock (HH:MM), or `unknown` before it has been set.
+- Brightness: the core's backlight percentage.
