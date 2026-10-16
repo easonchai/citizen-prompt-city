@@ -283,6 +283,18 @@ static void swipe(int dir) {
 }
 
 static void hold(void) { cz_touch(CZ_TOUCH_DOWN, 120, 120, now); run(1100); cz_touch(CZ_TOUCH_UP, 120, 120, now); now += 400; }
+/* a tap at a place on the screen, then the pause that lets a Settings value tap apply */
+static void tap_at(int x, int y) { cz_touch(CZ_TOUCH_DOWN, x, y, now); now += 100; cz_touch(CZ_TOUCH_UP, x + 1, y, now); run(450); }
+static void up(void) { tap_at(120, 40); }
+static void down(void) { tap_at(120, 150); }
+static void left(void) { tap_at(40, 100); }
+static void right(void) { tap_at(200, 100); }
+static void vswipe(int dir) { /* finger moves 60 px vertically: +1 down the screen, -1 up */
+    cz_touch(CZ_TOUCH_DOWN, 120, 120 - 30 * dir, now);
+    now += 100; cz_touch(CZ_TOUCH_MOVE, 121, 120 + 30 * dir, now);
+    now += 50; cz_touch(CZ_TOUCH_UP, 121, 120 + 30 * dir, now);
+    now += 400;
+}
 
 static void test_settings(void) {
     int i;
@@ -291,26 +303,34 @@ static void test_settings(void) {
     quick_tap(); quick_tap();
     CHECK(cz_screen() == CZ_S_SETTINGS);
     check_and_write("settings");
-    swipe(1); CHECK(cz_brightness() == 40);  /* brightness applies at once */
+    swipe(1); CHECK(cz_brightness() == 40);  /* brightness applies at once, by swipe */
     swipe(1); CHECK(cz_brightness() == 10);
     swipe(-1); CHECK(cz_brightness() == 40);
-    swipe(1); swipe(1); CHECK(cz_brightness() == 100);
-    tap();                                   /* Clock */
-    swipe(1); CHECK(cz_clock() == 12 * 60 + 15);
-    swipe(-1); swipe(-1); CHECK(cz_clock() == 11 * 60 + 45);
+    right(); right(); CHECK(cz_brightness() == 100); /* or by tapping the arrows */
+    left(); CHECK(cz_brightness() == 10);
+    right(); CHECK(cz_brightness() == 100);
+    down();                                  /* Clock */
+    right(); CHECK(cz_clock() == 12 * 60 + 15);
+    left(); left(); CHECK(cz_clock() == 11 * 60 + 45);
     CHECK(cz_brightness() == 100);
     check_and_write("settings_clock");
-    tap();                                   /* Timezone: +1 h moves the local clock */
-    swipe(1); CHECK(cz_timezone() == 9); CHECK(cz_clock() == 12 * 60 + 45);
-    swipe(-1); CHECK(cz_timezone() == 8);
-    tap(); tap();                            /* Citizen, WiFi */
+    down();                                  /* Timezone: +1 h moves the local clock */
+    right(); CHECK(cz_timezone() == 9); CHECK(cz_clock() == 12 * 60 + 45);
+    left(); CHECK(cz_timezone() == 8);
+    vswipe(-1); vswipe(-1);                  /* swipe up twice: Citizen, WiFi */
     CHECK(cz_host_request() == CZ_REQ_NONE);
-    swipe(1); CHECK(cz_host_request() == CZ_REQ_PORTAL); CHECK(cz_host_request() == CZ_REQ_NONE);
-    tap();                                   /* Update: check, then install once the host reports one */
-    swipe(1); CHECK(cz_host_request() == CZ_REQ_CHECK_UPDATE);
+    right(); CHECK(cz_host_request() == CZ_REQ_PORTAL); CHECK(cz_host_request() == CZ_REQ_NONE);
+    tap_at(120, 100);                        /* a centre tap also activates */
+    CHECK(cz_host_request() == CZ_REQ_PORTAL);
+    down();                                  /* Update: check, then install once the host reports one */
+    right(); CHECK(cz_host_request() == CZ_REQ_CHECK_UPDATE);
     cz_set_version("1.1.0"); cz_set_update("1.2.0");
-    swipe(1); CHECK(cz_host_request() == CZ_REQ_INSTALL_UPDATE); CHECK(cz_host_request() == CZ_REQ_NONE);
+    right(); CHECK(cz_host_request() == CZ_REQ_INSTALL_UPDATE); CHECK(cz_host_request() == CZ_REQ_NONE);
     check_and_write("settings_update");
+    vswipe(1);                               /* swipe down goes back up the wheel: WiFi */
+    right(); CHECK(cz_host_request() == CZ_REQ_PORTAL);
+    up(); up(); up(); up();                  /* Citizen, Timezone, Clock, Brightness */
+    right(); CHECK(cz_brightness() == 40);
     CHECK(cz_screen() == CZ_S_SETTINGS);
     hold(); CHECK(cz_screen() == CZ_S_HOME); /* hold exits */
 
@@ -319,9 +339,18 @@ static void test_settings(void) {
     run(200); CHECK(cz_screen() == CZ_S_HOME); /* 20 s idle exits */
 
     quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
-    for (i = 0; i < 7; i++) tap();           /* tap cycles to Exit */
+    for (i = 0; i < 7; i++) down();          /* down seven times reaches Exit */
     CHECK(cz_screen() == CZ_S_SETTINGS);
-    swipe(1); CHECK(cz_screen() == CZ_S_HOME);
+    right(); CHECK(cz_screen() == CZ_S_HOME);
+
+    /* double tap leaves Settings and drops the first tap's value change */
+    quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
+    CHECK(cz_brightness() == 40);
+    cz_touch(CZ_TOUCH_DOWN, 200, 100, now); now += 100; cz_touch(CZ_TOUCH_UP, 201, 100, now); now += 150;
+    cz_touch(CZ_TOUCH_DOWN, 200, 100, now); now += 100; cz_touch(CZ_TOUCH_UP, 201, 100, now);
+    CHECK(cz_screen() == CZ_S_HOME);
+    run(500); CHECK(cz_brightness() == 40);
+    CHECK(cz_hearts() == 3);                 /* and nothing fed the pet */
 
     /* a double tap that starts off Home (QR dismiss) is two plain taps */
     hold(); CHECK(cz_screen() == CZ_S_QR);

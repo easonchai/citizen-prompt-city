@@ -238,12 +238,17 @@ static void hatch(const struct cz_view *v) {
 /* Settings (PRD 2.8): previous and next items in ink at size 2, the selected item and its value in gold. */
 static void tri(int y, int up) { int i; for (i = 0; i < 3; i++) cz_rect(CX - 1 - 2 * i, up ? y + 2 * i : y + 4 - 2 * i, 2 + 4 * i, 2, CZ_C_INK); }
 
+/* a sideways triangle 5 px wide, pointing left (dir -1) or right (+1), top-left at x, y */
+static void arrow(int x, int y, int dir) { int i; for (i = 0; i < 3; i++) cz_rect(dir < 0 ? x + 2 * i : x + 4 - 2 * i, y + 4 - 2 * i, 2, 2 + 4 * i, CZ_C_GOLD); }
+
 static void settings(const struct cz_view *v) {
     cz_rect(0, 0, CZ_W, CZ_H, CZ_C_DEEP);
     tri(30, 1);
     cz_text(v->set_prev, CX, 48, CZ_C_INK, 2, CZ_CENTER);
     cz_text(v->set_label, CX, 84, CZ_C_GOLD, 3, CZ_CENTER);
     cz_text(v->set_value, CX, 108, CZ_C_GOLD, 2, CZ_CENTER);
+    if (v->set_arrows & 1) arrow(30, 106, -1);
+    if (v->set_arrows & 2) arrow(204, 106, 1);
     cz_text(v->set_next, CX, 140, CZ_C_INK, 2, CZ_CENTER);
     tri(160, 0);
     banner("SETTINGS", 0);

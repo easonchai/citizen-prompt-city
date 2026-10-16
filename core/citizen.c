@@ -45,6 +45,8 @@ static struct {
     uint32_t t0, last_tap;
     int brightness;
     int tap_home; /* the last tap landed on Home or Sulk, so a quick second tap opens Settings */
+    int tap_set;  /* the last tap landed on Settings, so a quick second tap leaves it */
+    int pending, pending_dir; uint32_t pending_ms; /* a Settings value tap waits DOUBLE_TAP_MS so a double tap can cancel it */
     /* clock and settings */
     int clock_known, tz, sel, wifi_state;
     uint32_t day_ms, reqs; /* reqs: bitmask of pending enum cz_request */
@@ -119,6 +121,8 @@ static void clock_add(uint32_t ms) {
     if (S.screen == CZ_S_SETTINGS && S.day_ms / MIN_MS != m) S.stale = 1; /* the Clock row shows minutes */
 }
 
+static void setting_change(int dir);
+
 static void advance(uint32_t now) {
     uint32_t dt, limit;
     if (S.undo_ok && S.screen != CZ_S_FEED) S.undo_ok = 0;
@@ -138,6 +142,10 @@ static void advance(uint32_t now) {
     if (S.screen == CZ_S_SULK && !sulking()) S.screen = CZ_S_HOME;
     if ((S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) && S.idle_ms >= IDLE_SLEEP_MS) go(CZ_S_SLEEP);
     if (S.screen == CZ_S_SETTINGS && S.idle_ms >= SETTINGS_IDLE_MS) go(base_screen());
+    if (S.pending && (S.screen != CZ_S_SETTINGS || now - S.pending_ms >= DOUBLE_TAP_MS)) {
+        S.pending = 0;
+        if (S.screen == CZ_S_SETTINGS) setting_change(S.pending_dir);
+    }
     /* hold fires while the finger is still down */
     if (S.down && !S.consumed && S.maxd < TAP_PX && now - S.t0 >= HOLD_MS) {
         S.consumed = 1;
@@ -164,9 +172,25 @@ static void play(void) {
     go(CZ_S_PLAY);
 }
 
-static void gesture_tap(uint32_t now) {
+static void setting_change(int dir);
+
+/* Settings is a vertical wheel: the row above at y 48, the selected row at 84-108, the row below at 140.
+ * Tap the top third to move up, the bottom third to move down, the middle row's left side to change back
+ * and its right side (or centre) to change forward or activate. */
+#define SET_ROW_TOP 70
+#define SET_ROW_BOTTOM 125
+#define SET_LEFT_X 80
+static void settings_tap(int x, int y, uint32_t now) {
+    if (y < SET_ROW_TOP) S.sel = (S.sel + SET_N - 1) % SET_N;
+    else if (y > SET_ROW_BOTTOM) S.sel = (S.sel + 1) % SET_N;
+    else { S.pending = 1; S.pending_dir = x < SET_LEFT_X ? -1 : 1; S.pending_ms = now; }
+    S.stale = 1;
+}
+
+static void gesture_tap(int x, int y, uint32_t now) {
     int home = S.screen == CZ_S_HOME || S.screen == CZ_S_SULK;
-    if (S.tapped && S.tap_home && now - S.last_tap < DOUBLE_TAP_MS) { /* second tap: open Settings, no tap action */
+    int again = S.tapped && now - S.last_tap < DOUBLE_TAP_MS;
+    if (again && S.tap_home) { /* second tap: open Settings, no tap action */
         S.tapped = 0;
         if (S.undo_ok && S.screen == CZ_S_FEED) { /* the first tap fed the pet: take that back, Settings is free */
             S.hearts = S.undo_hearts; S.hunger_ms = S.undo_hunger; S.lost = S.undo_lost;
@@ -176,11 +200,17 @@ static void gesture_tap(uint32_t now) {
         go(CZ_S_SETTINGS);
         return;
     }
+    if (again && S.tap_set && S.screen == CZ_S_SETTINGS) { /* double tap leaves Settings, the first tap's value change is dropped */
+        S.tapped = 0; S.pending = 0;
+        go(base_screen());
+        return;
+    }
     S.tapped = 1;
     S.tap_home = home;
+    S.tap_set = S.screen == CZ_S_SETTINGS;
     S.last_tap = now;
     if (home) feed();
-    else if (S.screen == CZ_S_SETTINGS) { S.sel = (S.sel + 1) % SET_N; S.stale = 1; }
+    else if (S.screen == CZ_S_SETTINGS) settings_tap(x, y, now);
     else if (S.screen != CZ_S_HATCH) go(base_screen()); /* Sleep, QR and every event screen */
 }
 
@@ -218,8 +248,14 @@ static void gesture_swipe(int dir) {
     else if (S.screen == CZ_S_SETTINGS) setting_change(dir);
 }
 
+/* vertical swipe: on Settings the wheel follows the finger (up = next row), elsewhere it plays like any swipe */
+static void gesture_vswipe(int down) {
+    if (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) play();
+    else if (S.screen == CZ_S_SETTINGS) { S.sel = (S.sel + (down ? SET_N - 1 : 1)) % SET_N; S.stale = 1; }
+}
+
 void cz_touch(int kind, int x, int y, uint32_t now_ms) {
-    int dx = x - S.x0, dy = y - S.y0, d, dir = dx > 0 ? 1 : -1;
+    int dx = x - S.x0, dy = y - S.y0, d, dir = dx > 0 ? 1 : -1, down = dy > 0;
     advance(now_ms);
     S.idle_ms = 0;
     if (kind == CZ_TOUCH_DOWN) {
@@ -231,9 +267,12 @@ void cz_touch(int kind, int x, int y, uint32_t now_ms) {
     if (dy < 0) dy = -dy;
     d = dx > dy ? dx : dy;
     if (d > S.maxd) S.maxd = d;
-    if (!S.consumed && dx >= SWIPE_PX && now_ms - S.t0 <= SWIPE_MS) { S.consumed = 1; gesture_swipe(dir); }
+    if (!S.consumed && now_ms - S.t0 <= SWIPE_MS) {
+        if (dx >= SWIPE_PX && dx >= dy) { S.consumed = 1; gesture_swipe(dir); }
+        else if (dy >= SWIPE_PX) { S.consumed = 1; gesture_vswipe(down); }
+    }
     if (kind == CZ_TOUCH_UP) {
-        if (!S.consumed && now_ms - S.t0 < TAP_MS && S.maxd < TAP_PX) gesture_tap(now_ms);
+        if (!S.consumed && now_ms - S.t0 < TAP_MS && S.maxd < TAP_PX) gesture_tap(S.x0, S.y0, now_ms);
         S.down = 0;
     }
 }
@@ -466,6 +505,7 @@ static void render_if_needed(void) {
     if (S.screen == CZ_S_SETTINGS) {
         v.set_prev = SET_LABEL[(S.sel + SET_N - 1) % SET_N]; v.set_label = SET_LABEL[S.sel];
         v.set_next = SET_LABEL[(S.sel + 1) % SET_N]; v.set_value = setting_value();
+        v.set_arrows = S.sel == SET_ABOUT ? 0 : S.sel >= SET_WIFI ? 2 : 3; /* actions only go one way */
     }
     cz_hatch_y = hatch_y();
     cz_anim_box(S.screen, &bx, &by, &bw, &bh);

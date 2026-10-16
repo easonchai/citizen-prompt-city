@@ -32,8 +32,8 @@ button label is clipped. (Use the iframe, not `--window-size=400`: desktop Chrom
   three.js 0.160.0 loads from cdnjs (OrbitControls from jsDelivr) on first use; the 2D sim does not need it.
 - URL parameters: `?scenario=desk|event|forgotten` starts that preset, `?speed=N` sets the speed (after the preset), `?view=3d`
   opens the 3D view, e.g. http://localhost:8787/?view=3d&scenario=event&speed=60.
-- Gesture buttons inject raw touch sequences: Tap, Swipe, Hold, Double tap (opens Settings: tap = next item, swipe right = change,
-  swipe left = back, hold = exit).
+- Gesture buttons inject raw touch sequences: Tap, Swipe, Hold, Double tap (opens Settings: tap ▲/▼ or the rows above and below to move, tap ◂/▸ or swipe to change, double tap again to leave,
+  hold or 20 s idle also exit).
 - Clock: time of day (HH:MM, calls `cz_set_clock`), timezone (`cz_set_timezone`), and "use my computer's clock", which re-sets the
   badge clock from `Date` every simulated minute. Between sets the core advances its own clock from `cz_tick`. Scenarios set it:
   Desk day 09:00, Event day 10:00, Forgotten 20:00.
