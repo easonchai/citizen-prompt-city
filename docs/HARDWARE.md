@@ -2,6 +2,8 @@
 
 Board: ESP32-2424S012C. Source: rzeldent/platformio-espressif32-sunton board definition `esp32-2424S012C.json`, and the vendor teardown. Do not design against any other numbers.
 
+How the firmware uses these pins, builds, flashes, syncs and sleeps: [`firmware/README.md`](../firmware/README.md).
+
 ## Verified table
 
 | Item | Value |
