@@ -313,3 +313,23 @@ The images in `docs/sim/` were taken with headless Chrome against the server on 
 The 3D view needs WebGL, which `--disable-gpu` removes in headless mode. Use
 `--use-angle=swiftshader --enable-unsafe-swiftshader` instead of `--disable-gpu` for `?view=3d`. The selftest
 shot used `--window-size=1400,1800 --virtual-time-budget=12000` so the whole run completes before capture.
+
+## How the simulator relates to the firmware
+
+Same core, same frames. `core/` is C99 with no libc and no malloc, and it owns every screen, gesture, timer and
+pixel. The firmware (`firmware/src/main.cpp`), the simulator and the tests all drive it through the same
+`cz_*` API in `core/citizen.h`:
+
+| | Firmware on the ESP32-C3 | Simulator |
+|---|---|---|
+| Clock | `cz_tick(millis())` once per loop pass, paced at 16 ms | `cz_tick(sim_ms)` at 30 Hz of simulated time, time runs at the chosen speed |
+| Touch | CST816S events to `cz_touch` down, move, up | Pointer events on the canvas, or the gesture buttons, to the same calls |
+| Pixels | `cz_dirty_rows` then `push_rows` over SPI to the GC9A01 | `cz_dirty_rows` then a draw to the canvas; the rows feed the push model |
+| Sleep | `cz_wants_sleep` then deep sleep, `cz_init` with the saved blob on wake | Host sleep setting: Deep does the same save and re-init |
+| WiFi | HTTP sync at boot, on wake and every 60 s while awake (F6) | Same policy, with queued messages standing in for the server |
+| Telemetry | One F3 JSON line per second on serial | One row per simulated second, same leading keys, plus the model's extras |
+| Host requests | `cz_host_request` opens the portal, checks or installs an update | Same poll, answered with simulated results |
+
+Because the framebuffer and palette come from the core, a screen in the simulator is pixel for pixel the screen
+on the badge. The only things the simulator estimates are time and power, which is what the hardware model and its
+calibration are for. `make test` renders every screen from the same core to `tests/out/*.ppm`.
