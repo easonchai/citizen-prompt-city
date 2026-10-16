@@ -62,3 +62,13 @@ The nine brand colours from `core/gfx.c`. Swatches in `palette/` are 24x24 PNGs 
 | ![teal](palette/teal.png) | teal | `#2bb8a8` | secondary |
 | ![pink](palette/pink.png) | pink | `#f4a3b5` | sprites only |
 | ![sky](palette/sky.png) | sky | `#5aa9e6` | day sky |
+
+## Board reference
+
+The ESP32-2424S012C, the "ESP32-C3 1.28 inch round touch display with case". Vendor drawings and listing photos, for the case, the pin and the film's bezel tracking.
+
+| ![Case front and back](ref/diymore-case-front-back.png) Case, front and back | ![Dimensions](ref/dimensions.png) Dimensions | ![Interfaces](ref/interfaces.png) Interfaces and pinout |
+|---|---|---|
+| ![Onboard](ref/onboard.png) Onboard parts | ![Battery](ref/battery.png) Battery header (unused, the badge runs on USB-C) | ![Product](ref/product.jpg) Listing photo |
+
+Listing photos in `ref/ws-*.jpg`: the bare board (`ws-bare-1` to `ws-bare-3`), the case (`ws-case-1` to `ws-case-5`, `ws-case-details-5`, `ws-case-front`, `ws-case-size`).
