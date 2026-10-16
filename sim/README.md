@@ -199,3 +199,41 @@ every 10 s of real time (`cache: no-store`) and expects JSON with optional strin
 either value changes it is delivered to the core (cut to 64 characters); if the badge is asleep or still hatching
 it is queued for the next sync instead. The line under the box reads `live: ok HH:MM:SS` after each successful
 poll, or the error. The default url is `https://prmpt.city/api/c/tenuk`.
+
+## Hardware model and the Nerd panel
+
+The Nerd button opens the telemetry panel. The model is a handful of pure functions in `model.js` over the
+constants in `hardware.json`; the full derivation and the calibration procedure are in
+[docs/sim/hardware-model.md](../docs/sim/hardware-model.md). In short, per drawn frame:
+
+- core ms = measured wasm `cz_tick` plus render wall time x `core_calibration`
+- rows from `cz_dirty_rows`; bytes = rows x 240 x 2
+- push ms = bytes x 8 / `spi_hz` x 1000 + ceil(rows / `chunk_rows`) x `chunk_overhead_us`
+- frame ms = core + push; fps = min(`fps_cap`, 1000 / frame)
+
+Power is integrated over simulated time from a steady current per state (awake = MCU + panel + backlight x
+brightness, plus WiFi idle when connected; light and deep sleep have their own currents) plus one TX burst per
+sync. Battery hours divide `battery_mah` by the average current over the last simulated hour. Temperature is
+ambient plus supply volts x amps x `thermal_c_per_w`, smoothed with a 60 s lag.
+
+What each telemetry row means:
+
+| Row | Meaning |
+|---|---|
+| fps, frame, core, push | The last drawn frame: capacity fps, its total, core and push ms. |
+| dirty rows | Rows the last frame touched and the bytes that pushes. |
+| SPI util, CPU | Share of the last simulated second spent pushing, and pushing plus core work. |
+| current | Average mA over the last simulated second. |
+| avg last hour | Rolling mean mA over the last 3,600 simulated seconds. |
+| used | mAh since the last reset. |
+| battery left | Hours a `battery_mah` pack would last at the last-hour average. |
+| temperature | The thermal estimate. |
+| heap free | Static figure from the verified firmware build, not modelled. |
+| syncs | Syncs since the last reset. |
+| wasm raw | Unscaled wasm time of the last drawn frame on your machine. |
+| full-frame push | What a 240-row push costs with the current constants (24.24 ms with the defaults). |
+
+Every value reads `est.` until a firmware log has been imported. The chart below the rows plots the model's
+frame ms per second for the last 300 s in gold, imported firmware frame ms in teal, with a grid line at 33 ms.
+Hardware constants lists every numeric key of `hardware.json` except the sync interval (which lives in the WiFi
+panel) as an input; edits take effect on the next frame and are not saved.
