@@ -186,6 +186,7 @@ static void telemetry_tick() {
 // --- touch -> raw core events ---
 static bool touch_down = false;
 static int touch_x, touch_y;
+static uint32_t last_touch_ms = 0;  // F11: idle gate for the automatic OTA install
 
 static void poll_touch() {
   lgfx::touch_point_t tp;
@@ -198,6 +199,7 @@ static void poll_touch() {
   } else if (!now && touch_down) {
     cz_touch(CZ_TOUCH_UP, touch_x, touch_y, t);
   }
+  if (now || touch_down) last_touch_ms = t;
   if (now) touch_x = tp.x, touch_y = tp.y;
   touch_down = now;
 }
@@ -492,13 +494,14 @@ static void run_command(char *line) {
   else if (!strcmp(line, "version")) { Serial.println(CZ_VERSION); return; }
 #if CZ_WIFI
   else if (!strcmp(line, "update")) { update_url = ""; install_update(); }
+  else if (!strcmp(line, "autoupdate")) { prefs.putInt("autoupd", atoi(arg) ? 1 : 0); }
 #endif
   else if (!strcmp(line, "reset")) { prefs.clear(); rtc_sleep_stamp_s = 0;
 #if CZ_WIFI
     rtc_last_upd[0] = rtc_last_city[0] = 0;
 #endif
     Serial.println("cleared, restarting"); delay(100); ESP.restart(); }
-  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | msg ... | checkin [CITY] | brightness 100|40|10 | time HH:MM | tz N | version | update | stats | reset"); return; }
+  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | msg ... | checkin [CITY] | brightness 100|40|10 | time HH:MM | tz N | version | update | autoupdate 0|1 | stats | reset"); return; }
   Serial.println("ok");
 }
 
@@ -628,6 +631,15 @@ void loop() {
     case CZ_REQ_PORTAL: run_portal(); break;  // blocks, reboots on save
     case CZ_REQ_CHECK_UPDATE: check_update(); break;
     case CZ_REQ_INSTALL_UPDATE: install_update(); break;
+  }
+  // F11: a newer build is waiting (update_url set by check_update) and the badge sat idle on Home/Sulk for 10 s.
+  // One try per wake so a failed download cannot loop; Settings -> Update stays the manual path.
+  static bool auto_tried = false;
+  if (!auto_tried && update_url.length() && prefs.getInt("autoupd", 1) && millis() - last_touch_ms >= 10000 &&
+      (cz_screen() == CZ_S_HOME || cz_screen() == CZ_S_SULK)) {
+    auto_tried = true;
+    cz_message("UPDATING");
+    install_update();
   }
 #endif
   if (cz_timezone() != known_tz) set_tz(cz_timezone());  // changed in Settings: persist and re-anchor

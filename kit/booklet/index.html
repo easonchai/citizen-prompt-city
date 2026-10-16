@@ -35,7 +35,7 @@
 
   /* 2 citizens */
   .trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 2mm 0 6mm; text-align: center; }
-  .trio img { width: 100%; background: var(--deep); border-radius: 3mm; }
+  .trio img { width: 70%; max-width: 512px; image-rendering: pixelated; background: var(--deep); border-radius: 3mm; }
   .trio b { display: block; font: 10pt "Silkscreen", monospace; color: var(--gold); margin-top: 1.5mm; }
   .trio span { font-size: 9.5pt; color: var(--muted); }
   .facts { display: grid; gap: 2.5mm; }
@@ -59,12 +59,15 @@
 
   /* 4 screens */
   .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3.5mm 3mm; text-align: center; }
+  .day { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin-top: 5mm; text-align: center; }
+  .day img { width: 20mm; max-width: 960px; display: block; margin: 0 auto; border-radius: 50%; image-rendering: pixelated; }
+  .day span { display: block; font: 8pt "Silkscreen", monospace; color: var(--coral); margin-top: 1mm; }
   .shots img { width: 100%; border-radius: 50%; }
   .shots b { display: block; font: 8.5pt "Silkscreen", monospace; color: var(--gold); margin-top: 1mm; }
   .shots span { display: block; font-size: 8.5pt; line-height: 1.25; color: var(--muted); }
 
   /* 5 power */
-  .board { width: 100%; border-radius: 4mm; background: #fff; margin: 1mm 0 5mm; }
+  .board { width: 100%; border-radius: 4mm; background: #0d1226; margin: 1mm 0 5mm; }
   .steps { display: grid; gap: 3mm; }
   .step { display: flex; gap: 4mm; align-items: flex-start; }
   .num { flex: none; width: 9mm; height: 9mm; border-radius: 2mm; background: var(--navy); color: var(--gold); font: 11pt "Silkscreen", monospace; display: grid; place-items: center; }
@@ -130,6 +133,12 @@
     <div><span class="k">Always moving</span><span>It breathes, blinks and bobs. It is never a still picture while awake.</span></div>
     <div><span class="k">Day and night</span><span>The sky follows the real clock: dawn, blue day, dusk, then lit windows and a moon.</span></div>
   </div>
+  <div class="day">
+    <div><img class="px" src="../img/screens/day-0700-4x.png" alt=""><span>DAWN</span></div>
+    <div><img class="px" src="../img/screens/day-1200-4x.png" alt=""><span>DAY</span></div>
+    <div><img class="px" src="../img/screens/day-1830-4x.png" alt=""><span>DUSK</span></div>
+    <div><img class="px" src="../img/screens/day-0300-4x.png" alt=""><span>NIGHT</span></div>
+  </div>
 </section>
 
 <!-- 3 gestures -->
@@ -182,7 +191,7 @@
 <section class="page cream">
   <div class="tag">Power and sleep</div>
   <h2>Plug it in anywhere.</h2>
-  <img class="board" src="../img/board.png" alt="The badge, front and back">
+  <img class="board" src="../img/board.jpg" alt="The badge kit: three faces and the back with tape and pin">
   <div class="steps">
     <div class="step"><span class="num">1</span><p>It runs from any USB-C source: a laptop, a phone charger or a power bank. There is no battery inside, so it needs a cable to stay on.</p></div>
     <div class="step"><span class="num">2</span><p>After 30 seconds without a touch it falls asleep and the screen goes dark. A tap wakes it.</p></div>
@@ -242,7 +251,7 @@
     </table>
   </div>
   <div class="nav"><b>Tap</b> moves to the next item. <b>Swipe right</b> changes it, <b>swipe left</b> changes it back. <b>Hold</b>, or wait 20 seconds, to leave.</div>
-  <p style="margin-top:4mm;font-size:11pt">The badge checks for a new version when it syncs on WiFi. When there is one, Update shows "NEW" and the version number. Nothing installs until you swipe right on it; then the badge downloads it, restarts, and keeps hearts and settings. This version does not check a signature on the download, so only use the official server.</p>
+  <p style="margin-top:4mm;font-size:11pt">The badge checks for a new version when it syncs on WiFi. When there is one, Update shows "NEW" and the version number. The badge installs it by itself when you have not touched it for 10 seconds on the home screen (or swipe right on Update to do it yourself); it downloads it, restarts, and keeps hearts and settings. This version does not check a signature on the download, so only use the official server.</p>
 </section>
 
 <!-- 8 when something looks wrong -->
