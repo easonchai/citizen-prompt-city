@@ -278,10 +278,12 @@ http://localhost:8791/?selftest drives the acceptance checks in simulated time o
 - `boot`: the screen after 20 s (Hatch finishes and Home appears), and `full_frame`: rows, push and core ms of
   the last full-frame draw.
 - `tap`, `swipe`, `hold`, `tap_on_qr`: the screen after each gesture button.
-- `double` and `settings_open`: double tap lands on Settings; `swipe_brightness`: a swipe in Settings changes the
-  brightness value; `settings_exit`: hold leaves Settings.
+- `double` and `settings_open`: double tap lands on Settings; `swipe_brightness`: the brightness value before and
+  after a swipe in Settings (recorded, not asserted; it depends on which row is selected); `settings_exit`: hold
+  leaves Settings.
 - `day_night_px20`: one skyline pixel at noon and at 03:00 differs.
-- `home_frames`: four consecutive Home animation steps all differ, and 250 ms samples are distinct.
+- `home_frames`: four consecutive Home animation steps all differ, plus four 250 ms samples and whether they
+  happened to be distinct (the breath steps every 600 ms, so they need not be).
 - `forgotten_72h`: the Forgotten scenario run to the end, with fps, frame and push ms, average mA, mAh, battery
   hours and weeks, temperature, syncs, power state and how many wall-clock ms the run took.
 - `event_day_1h`: one hour of Event day, plus `syncs_per_h` and `wakes_per_h`.
