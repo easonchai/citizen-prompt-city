@@ -270,3 +270,7 @@ home_nochange      0.007      0     0.000      0.001      0.001   30.0
 ```
 
 Two things to read from it: the SPI push of a full frame costs more than any screen's drawing, so the dirty-row clipping (`home_blink` pushes 130 rows, an idle Home pushes none) is what keeps the badge responsive; and QR is the one expensive screen because it re-encodes the code on every redraw.
+
+## Portrait mode
+
+`cz_set_portrait(1)` turns the core into a picture of the pet for the web page: it marks the pet hatched, sets 4 hearts, jumps to Home, and from then on draws Home without the hearts row or the action icons. Touch events are ignored, so nothing can feed, play or open Settings, and the 30 s idle timer never puts it to sleep. The breath animation, the name footer and the day and night sky still run, so the web portrait matches what the badge shows. `cz_set_portrait(0)` restores normal behaviour.
