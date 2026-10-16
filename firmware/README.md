@@ -108,3 +108,42 @@ Flow:
 The portal blocks the main loop but keeps ticking the core and pushing frames, and the serial console still works inside it. With no stored SSID the badge never starts the radio and counts its first sync as done so it can still sleep.
 
 On boot with an SSID stored, `wifi_begin` connects in the background (station mode) and the pet keeps running. The Settings WiFi row shows CONNECTING for 8 s, then OK or FAIL; WiFi keeps retrying after FAIL. On connect, SNTP starts against `pool.ntp.org` with the stored timezone.
+
+## Sync
+
+All HTTP goes to `<base>/api/c/<slug>/...` with a 3 s timeout, where `<base>` is prefs `base` (default `CZ_DEFAULT_BASE`) and `<slug>` is prefs `slug` (default the creature's lowercase name: `tenuk`, `kenyalang`, `harimau`). The badge parses responses with a tiny flat-object string scanner (`json_str`), so values must be plain strings without escapes.
+
+### State poll
+
+`GET <base>/api/c/<slug>/state`, once right after connecting (or after the 8 s connect timeout), then every 60 s while awake. The server rate-limits to one poll per 10 s per slug and answers 429 with an empty state otherwise.
+
+```json
+{"msg":"<last assistant reply, at most 64 chars>","checkin":"<city or empty>","name":"<badge name>","updatedAt":"<ISO 8601 or null>","now":"2026-10-31T09:41:00.000Z"}
+```
+
+What the badge does with it:
+
+- `msg` opens Talk only when `updatedAt` differs from the last one seen. The last value is kept in RTC memory across deep sleep and in prefs `last_upd` across power loss, so an old message does not re-open Talk on every poll and wake.
+- `checkin` opens Check-in when the city differs from the last one seen (RTC and prefs `last_city`).
+- `name` is stored and applied when it differs from prefs `name`.
+- `now` (UTC) sets the core clock, converted to local with the stored timezone, until SNTP has synced. After that the badge re-anchors to system time once a minute.
+
+### Telemetry
+
+The badge prints one JSON line per second on serial, and once a minute while awake (never on the first poll of a wake) POSTs the latest line as `Content-Type: application/json` to `<base>/api/c/<slug>/telemetry`. The server stores anything that parses as a JSON object up to 2048 bytes; `GET ...?n=100` reads the latest rows back.
+
+```json
+{"t":123456,"fps":30,"frame_ms":1.52,"push_ms":1.20,"rows":130,"heap":198000,"screen":1,"hearts":3,"wifi":"ok","rssi":-61}
+```
+
+`t` is `millis()`, `fps` counts loop passes that pushed pixels, `frame_ms` is tick plus render plus push averaged over the second, `push_ms` is convert plus SPI, `rows` is the largest dirty span pushed, `screen` is `enum cz_screen`, `wifi` is `off`, `connecting`, `ok` or `fail`. The numbers in the example are illustrative; no real device line has been captured yet.
+
+### OTA
+
+`GET <base>/api/firmware/latest` returns the published `latest.json` plus an absolute download URL:
+
+```json
+{"version":"1.1.0","file":"firmware-1.1.0.bin","sha256":"<hex>","size":1219040,"publishedAt":"2026-10-16T05:32:44.904Z","url":"https://<host>/firmware/firmware-1.1.0.bin"}
+```
+
+The badge reads `version` and `url` only. It checks after the first state poll of every wake and then at most hourly, compares `version` to `CZ_VERSION` as three-part numeric semver, and tells the core (`cz_set_update`) only when the published build is newer. Install happens three ways: automatically, once per wake, when a newer build is known, prefs `autoupd` is 1 (default) and the badge has sat untouched on Home or Sulk for 10 s; from the Settings Update row; or the serial `update` command. `install_update` saves the pet, shows `UPDATING...`, then streams the image into the idle app slot with `HTTPUpdate` over a `WiFiClientSecure` that skips certificate checks, following redirects, and reboots on success. On failure it shows `UPDATE FAILED`. `sha256` from the manifest is not verified by the badge; the ESP-IDF image header and appended hash are still checked before the slot switch.
