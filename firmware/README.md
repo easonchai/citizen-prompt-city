@@ -78,6 +78,7 @@ Lines over USB CDC at 115200, one command per line, from `run_command` in `main.
 | `wifi SSID PASS` | Store credentials (prefs `ssid`, `pass`) and restart. |
 | `url BASE` | Server base URL (prefs `base`), e.g. `https://connect.prmpt.city`. Rebuilds the QR URL. |
 | `slug S` | Badge slug (prefs `slug`). The QR and API paths become `<base>/c/<slug>`. |
+| `token KEY` | Device key (prefs `token`), copied from `/admin/badges/<slug>` on the server. Sent as `X-Badge-Key` on every telemetry POST; without it the server answers 401 and stores nothing. |
 | `msg ...` | Show a Talk message now. |
 | `checkin [CITY]` | Show a Check-in, default KL. |
 | `brightness 100|40|10` | Backlight level; stored in the core's save blob. |
@@ -102,8 +103,8 @@ Flow:
 
 1. The badge starts an open access point named `CITIZEN-XXXX` (the last two bytes of its MAC) and shows `JOIN WIFI CITIZEN-XXXX` on the Talk screen; the same line goes to serial.
 2. A DNS server answers every hostname with 192.168.4.1, and unknown paths redirect there, so phones open the captive portal page on join.
-3. The form takes WiFi name (required, up to 32), password (up to 64), server base URL (optional, up to 128, placeholder is `CZ_DEFAULT_BASE`) and slug (optional, up to 32, placeholder `tenuk`). Out-of-range input gets a 400.
-4. Save writes `ssid`, `pass` and, if given, `base` and `slug` to Preferences, answers "Saved. Citizen is restarting." and restarts after 500 ms.
+3. The form takes WiFi name (required, up to 32), password (up to 64), server base URL (optional, up to 128, placeholder is `CZ_DEFAULT_BASE`), slug (optional, up to 32, placeholder `tenuk`) and device key (optional, up to 64). Out-of-range input gets a 400.
+4. Save writes `ssid`, `pass` and, if given, `base`, `slug` and `token` to Preferences, answers "Saved. Citizen is restarting." and restarts after 500 ms.
 
 The portal blocks the main loop but keeps ticking the core and pushing frames, and the serial console still works inside it. With no stored SSID the badge never starts the radio and counts its first sync as done so it can still sleep.
 
@@ -130,7 +131,7 @@ What the badge does with it:
 
 ### Telemetry
 
-The badge prints one JSON line per second on serial, and once a minute while awake (never on the first poll of a wake) POSTs the latest line as `Content-Type: application/json` to `<base>/api/c/<slug>/telemetry`. The server stores anything that parses as a JSON object up to 2048 bytes; `GET ...?n=100` reads the latest rows back.
+The badge prints one JSON line per second on serial, and once a minute while awake (never on the first poll of a wake) POSTs the latest line as `Content-Type: application/json` with the header `X-Badge-Key: <prefs token>` to `<base>/api/c/<slug>/telemetry`. The server stores anything that parses as a JSON object up to 2048 bytes when the key matches the badge's `deviceKey`; a wrong or missing key is a 401, a badge without a key on the server is a 503. `GET ...?n=100` reads the latest rows back for the admin, the owning speaker or the same header.
 
 ```json
 {"t":123456,"fps":30,"frame_ms":1.52,"push_ms":1.20,"rows":130,"heap":198000,"screen":1,"hearts":3,"wifi":"ok","rssi":-61}
