@@ -90,3 +90,21 @@ Lines over USB CDC at 115200, one command per line, from `run_command` in `main.
 | `reset` | Clear every preference and the RTC re-fire guards, then restart. The pet hatches again. |
 
 The badge also prints one telemetry JSON line per second on its own (see Sync) and `boot: first frame at N ms` on startup.
+
+## WiFi portal
+
+Credentials are provisioned through a captive portal, `run_portal` in `main.cpp`. It opens two ways:
+
+1. Hold BOOT for 2 s once the screen is lit (holding it through power-on enters ROM download mode instead).
+2. Settings wheel, WiFi row, forward tap or swipe right (`CZ_REQ_PORTAL`).
+
+Flow:
+
+1. The badge starts an open access point named `CITIZEN-XXXX` (the last two bytes of its MAC) and shows `JOIN WIFI CITIZEN-XXXX` on the Talk screen; the same line goes to serial.
+2. A DNS server answers every hostname with 192.168.4.1, and unknown paths redirect there, so phones open the captive portal page on join.
+3. The form takes WiFi name (required, up to 32), password (up to 64), server base URL (optional, up to 128, placeholder is `CZ_DEFAULT_BASE`) and slug (optional, up to 32, placeholder `tenuk`). Out-of-range input gets a 400.
+4. Save writes `ssid`, `pass` and, if given, `base` and `slug` to Preferences, answers "Saved. Citizen is restarting." and restarts after 500 ms.
+
+The portal blocks the main loop but keeps ticking the core and pushing frames, and the serial console still works inside it. With no stored SSID the badge never starts the radio and counts its first sync as done so it can still sleep.
+
+On boot with an SSID stored, `wifi_begin` connects in the background (station mode) and the pet keeps running. The Settings WiFi row shows CONNECTING for 8 s, then OK or FAIL; WiFi keeps retrying after FAIL. On connect, SNTP starts against `pool.ntp.org` with the stored timezone.
