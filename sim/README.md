@@ -36,3 +36,35 @@ repo-wide check.
 
 `window.cz` exposes the wasm exports and `window.sim` the simulator internals (`sim`, `hw`, `gesture`, `advanceTo`,
 `runScenario`, `toCsv`, `importLog`) for poking from the console.
+
+## The screen and gestures
+
+The badge is drawn at 3x (a 720x720 canvas) with a round mask and bezel, nearest-neighbour scaled so every pixel
+stays a crisp 3x3 block. Backlight brightness is approximated with a CSS brightness filter floored at 35% so the
+10% setting stays readable on a monitor.
+
+Mouse or finger on the screen sends raw touch events straight to the core (`cz_touch` down, move, up) and the core
+detects the gesture, exactly as it does on the badge:
+
+- Tap: click, or touch and release.
+- Swipe: drag.
+- Hold: press and keep still for 1 s.
+- Double tap: two quick taps (within 400 ms).
+
+While a finger is down the simulated clock runs at 1x whatever the speed setting, so gesture timing always uses
+real time. If the badge is asleep, the first touch only wakes it and is swallowed, as on hardware.
+
+The four gesture buttons under the screen inject fixed touch sequences for people without a mouse: Tap (down, up
+after 80 ms), Swipe (a left-to-right drag over 160 ms), Hold (down, up after 1.1 s) and Double tap (two taps 150 ms
+apart). Hold opens the QR screen. Double tap on Home or Sulk opens Settings.
+
+### Settings wheel
+
+Settings is a wheel of rows with the selected row in gold. To navigate:
+
+- Move: tap the row above or below the selected one, or swipe up or down.
+- Change a value: tap the left or right arrow on the selected row, or swipe left or right. The Swipe button is a
+  horizontal swipe, so in Settings it changes the selected value.
+- Leave: double tap again. Hold or 20 s without touching also exits.
+
+Everything on the wheel is core behaviour (`core/citizen.c`), not simulator code.
