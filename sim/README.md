@@ -68,3 +68,14 @@ Settings is a wheel of rows with the selected row in gold. To navigate:
 - Leave: double tap again. Hold or 20 s without touching also exits.
 
 Everything on the wheel is core behaviour (`core/citizen.c`), not simulator code.
+
+## URL parameters
+
+| Parameter | Effect |
+|---|---|
+| `?scenario=desk`, `event` or `forgotten` | Resets and starts that scenario on load (see Scenarios). |
+| `?speed=N` | Sets the speed multiplier after the scenario has started. Any positive number works; values not in the dropdown are added to it. |
+| `?view=3d` | Opens the 3D badge view instead of the flat screen. Without it the view last chosen with the 3D button is restored from localStorage. |
+| `?selftest` | Runs the acceptance checks once on load and prints the result (see Selftest). |
+
+They combine, for example http://localhost:8791/?view=3d&scenario=event&speed=60.
