@@ -160,3 +160,29 @@ Detected in `cz_touch` from raw down, move and up events. Constants are in `citi
 | Hold | Finger down 1 s or more, moved less than 12 px; fires from `cz_tick` while still down | QR screen | Leave Settings | Nothing |
 
 Once a swipe or hold has consumed the touch, the up event does nothing. Any touch resets the 30 s idle timer, including moves with no finger down, which the bench uses to keep the pet awake.
+
+## Timers
+
+All from `citizen.c` and `screens.c`. Timers are driven by the `now_ms` the host passes; `cz_init` applies `slept_seconds` on top.
+
+| Timer | Value | Effect |
+|---|---|---|
+| Heart loss | 90 min unfed | Lose 1 heart per 90 min since the last feed, at most 4 (`lost` counts them so a feed resets cleanly). |
+| Feed | immediate | +1 heart (max 4), hunger and `lost` reset to 0. |
+| Play reward | once per 30 min | +1 heart (max 4). A heart earned by play rebases hunger to the start of its 90 min window so it lives a full window. Fresh pets can play at once. |
+| Sulk | hearts <= 1 or 6 h unfed | Base screen becomes Sulk. |
+| Age cap | 7 days | Hunger, play age and slept time are capped so the ms counters stay clear of uint32 overflow. |
+| Idle sleep | 30 s | Home or Sulk goes to Sleep. Not in portrait mode. |
+| Settings idle | 20 s | Settings returns to base. |
+| Settings pending tap | 400 ms | A value tap waits this long so a double tap can cancel it. |
+| Feed, Play | 3 s | Event screen duration. |
+| Check-in | 4 s | Event screen duration. |
+| Talk | 8 s | Event screen duration. |
+| QR | 30 s | Screen timeout. |
+| Hatch typing | 60 ms per character | Then a 2 s hold while the sprite eases up from row 188 to 100. |
+| Home blink | 150 ms every 4 s | Pose flips to `CZ_BLINK`. |
+| Breath | 600 ms per step | Home and Sulk bob through 0, 1, 2, 1 px. Sleep breathes at 1200 ms per step. |
+| Bob | 250 ms per step | Feed, Play, Talk, Check-in, Sulk shiver. Talk cursor blinks at 500 ms. QR pet moves at 1200 ms. |
+| Feed crumbs | 750 ms per crumb | 3, 2, 1, 0 crumbs over the 3 s. |
+| Sulk drop | every 2 s | Sweat drop slides 4 steps down the head. |
+| Clock | real time | Minute of day advances with ticks, wraps at midnight. Sky phase: night before 06:00 and from 20:00, dawn until 08:00, day until 17:30, then dusk. Unknown clock renders night. |
