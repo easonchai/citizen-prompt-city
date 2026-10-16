@@ -416,11 +416,12 @@ static void run_portal() {
              "<p>Password<br><input name=pass type=password maxlength=64></p>"
              "<p>Server<br><input name=base type=url maxlength=128 placeholder='" CZ_DEFAULT_BASE "'></p>"
              "<p>Slug<br><input name=slug maxlength=32 placeholder='tenuk'></p>"
+             "<p>Device key<br><input name=token maxlength=64 placeholder='from the admin badge page'></p>"
              "<button>Save</button></form>");
   });
   web.on("/save", HTTP_POST, [&] {
-    String ssid = web.arg("ssid"), pass = web.arg("pass"), base = web.arg("base"), slug = web.arg("slug");
-    if (!ssid.length() || ssid.length() > 32 || pass.length() > 64 || base.length() > 128 || slug.length() > 32) {
+    String ssid = web.arg("ssid"), pass = web.arg("pass"), base = web.arg("base"), slug = web.arg("slug"), token = web.arg("token");
+    if (!ssid.length() || ssid.length() > 32 || pass.length() > 64 || base.length() > 128 || slug.length() > 32 || token.length() > 64) {
       web.send(400, "text/plain", "Check the fields and try again.");
       return;
     }
@@ -428,6 +429,7 @@ static void run_portal() {
     prefs.putString("pass", pass);
     if (base.length()) prefs.putString("base", base);
     if (slug.length()) prefs.putString("slug", slug);
+    if (token.length()) prefs.putString("token", token);
     web.send(200, "text/html", "<meta name=viewport content='width=device-width'><h2>Saved. Citizen is restarting.</h2>");
     delay(500);
     ESP.restart();
