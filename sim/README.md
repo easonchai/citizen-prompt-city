@@ -237,3 +237,15 @@ Every value reads `est.` until a firmware log has been imported. The chart below
 frame ms per second for the last 300 s in gold, imported firmware frame ms in teal, with a grid line at 33 ms.
 Hardware constants lists every numeric key of `hardware.json` except the sync interval (which lives in the WiFi
 panel) as an input; edits take effect on the next frame and are not saved.
+
+## Record, export and import (CSV calibration)
+
+- Record toggles collecting one telemetry row per simulated second. Scenarios switch it on for their whole run.
+- Export CSV downloads `citizen-telemetry.csv` with the recording, or the last 300 s if nothing was recorded.
+  Columns: `t,fps,frame_ms,push_ms,rows,heap,screen,hearts,wifi,rssi,core_ms,spi_pct,cpu_pct,ma,mah,battery_h,temp_c,power`.
+  The first ten match the firmware's F3 keys; the rest are model extras. Numbers are rounded to three decimals.
+- Import firmware serial log takes a saved `pio device monitor` capture. Lines that parse as F3 JSON are kept,
+  drawn over the model in the chart, and used to suggest `core_calibration` = firmware core ms
+  (`frame_ms - push_ms`) / mean wasm core ms per drawn frame. Apply factor writes it into the constants.
+
+Step by step, with what each number means, in [docs/sim/hardware-model.md](../docs/sim/hardware-model.md).
