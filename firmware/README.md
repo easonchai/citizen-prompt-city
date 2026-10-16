@@ -50,3 +50,18 @@ Platform `espressif32@6.12.0`, one library dependency, `lovyan03/LovyanGFX@1.2.7
 Web flasher: open `/flash/` on the deployed site (or `http://localhost:3000/flash/` from `pnpm dev` in `web/`) in Chrome or Edge, plug the badge in over USB-C and press Connect. It is ESP Web Tools driven by `web/public/flash/manifest.json`, which writes `bootloader.bin` at 0x0, `partitions.bin` at 0x8000, `boot_app0.bin` at 0xE000 and `firmware.bin` at 0x10000, with a full erase on a new install. `web/scripts/firmware-publish.ts` copies a built image into `web/public/firmware/` for OTA and the flasher.
 
 If the badge is not detected, hold BOOT while plugging in USB to enter the ROM download mode (GPIO 9 is a strapping pin), then release.
+
+## Partition layout
+
+`board_build.partitions = min_spiffs.csv` on the 4 MB flash:
+
+| Partition | Offset | Size |
+|---|---|---|
+| nvs | 0x9000 | 20 KB |
+| otadata | 0xE000 | 8 KB |
+| app0 | 0x10000 | 1,966,080 bytes |
+| app1 | 0x1F0000 | 1,966,080 bytes |
+| spiffs | 0x3D0000 | 128 KB |
+| coredump | 0x3F0000 | 64 KB |
+
+Two app slots are what make OTA possible: a new build is written to the idle slot and booted on success. nvs keeps the same offset as the earlier `huge_app.csv` layout, so Preferences (the save blob, WiFi credentials, settings) survived the switch and survive every update.
