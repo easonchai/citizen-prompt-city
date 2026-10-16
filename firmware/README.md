@@ -175,3 +175,12 @@ Verified build, 16 Oct 2026, firmware 1.1.0 with WiFi, HTTP, captive portal, OTA
 The core's share: the framebuffer is 57,600 bytes static, the sprites 98,304 bytes in flash (3 creatures x 8 poses x 64x64), and the push path uses two 3,840-byte line buffers (8 rows of RGB565, ping-pong so DMA overlaps the palette conversion). No 16-bit full-frame buffer is ever allocated.
 
 `scripts/check.sh` enforces the budget. It runs the core tests, soak, bench and wasm build, then `pio run -e citizen`, parses the `RAM:` and `Flash:` lines, and fails if flash exceeds `FLASH_BUDGET` (default 1,700,000 bytes, leaving room to grow inside the slot) or static RAM exceeds `RAM_BUDGET` (default 200,000 bytes). Both are environment variables. Run it before every push; CI runs the same script.
+
+## Hardware-day checklist
+
+Nothing below has been verified on a real badge yet. Each item is a build flag in `platformio.ini` so the fix is a rebuild, not a code change.
+
+1. Colour order and orientation. The panel is BGR with mirror X; LovyanGFX's GC9A01 driver already accounts for the default. If red and blue are swapped, set `-DCZ_RGB_ORDER=1`. If the image is mirrored or rotated, try `-DCZ_ROTATION=0..3` for rotation and `4..7` for the mirrored variants. Judge it on the Home screen: the sun on a day sky sits top right, the Petronas towers right of centre, the name under the pet.
+2. Touch wake from deep sleep. Let the badge sleep (30 s idle), then touch the glass. It should reboot into the pet with the hearts and clock continued. If it does not wake, or wakes on its own, enable `-DCZ_LIGHT_SLEEP_FALLBACK`.
+3. SPI at 80 MHz. Default is `-DLCD_SPI_HZ=40000000`. The panel is rated for 80 MHz; raise it only if the picture stays clean on every screen, QR included. The bench's push model assumes 40 MHz.
+4. Replace the bench placeholder. `make bench` estimates the ESP32-C3 with `CZ_SLOWDOWN=120`. Read `frame_ms` and `push_ms` from the serial telemetry line on each screen and set `CZ_SLOWDOWN` to match.
