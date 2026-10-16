@@ -147,3 +147,16 @@ A tap on any event screen (Feed, Play, Talk, QR, Check-in, Sleep) dismisses it t
 ### Rendering
 
 Nothing is drawn inside `cz_tick`. When the host calls `cz_framebuffer`, `cz_dirty` or `cz_dirty_rows`, the core packs everything the picture depends on into a 32-bit view key (screen, hearts, pose, animation step or Hatch progress, sky phase) and redraws only if the key differs from the last drawn one or a setter marked the state stale. When only the animation changed it clips the redraw to the screen's animation box from `cz_anim_box`; a Home blink clips to the pixels where the idle and blink sprites differ. The firmware then pushes only the dirty row span.
+
+## Gestures
+
+Detected in `cz_touch` from raw down, move and up events. Constants are in `citizen.c`.
+
+| Gesture | Rule | On Home or Sulk | On Settings | Elsewhere |
+|---|---|---|---|---|
+| Tap | Up within 300 ms of down, moved less than 12 px | Feed | Wheel tap (see the Settings wheel) | Dismiss to base; nothing on Hatch |
+| Double tap | A second tap within 400 ms of the first | Open Settings; a feed the first tap started is undone | Leave Settings; a value change the first tap started is dropped | Two plain taps |
+| Swipe | Moved 40 px or more within 600 ms of down; horizontal when dx >= dy, vertical otherwise | Play, either direction | Horizontal: change the value (right forward, left back). Vertical: move the wheel (swipe up selects the next row) | Nothing |
+| Hold | Finger down 1 s or more, moved less than 12 px; fires from `cz_tick` while still down | QR screen | Leave Settings | Nothing |
+
+Once a swipe or hold has consumed the touch, the up event does nothing. Any touch resets the 30 s idle timer, including moves with no finger down, which the bench uses to keep the pet awake.
