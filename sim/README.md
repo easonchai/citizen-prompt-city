@@ -249,3 +249,19 @@ panel) as an input; edits take effect on the next frame and are not saved.
   (`frame_ms - push_ms`) / mean wasm core ms per drawn frame. Apply factor writes it into the constants.
 
 Step by step, with what each number means, in [docs/sim/hardware-model.md](../docs/sim/hardware-model.md).
+
+## 3D view
+
+![3D view of the badge in its stock case, the live framebuffer on the window, during the event scenario](../docs/sim/sim-3d.png)
+
+*`?view=3d&scenario=event`: the ESP32-2424S012C in its case, rendered with three.js, showing the same framebuffer the 2D view draws.*
+
+The 3D button above the screen swaps the flat view for a three.js model of the physical badge: a 44 mm puck,
+13 mm thick, with the 240x240 framebuffer textured onto the 32.4 mm window, BOOT and RESET holes and the
+connector cutout on the back, and the USB-C slot on the edge. Drag or swipe to spin it, double-click to reset the
+camera; it auto-rotates when left alone. The window dims with the badge's brightness setting.
+
+It is for looking only: touches on the model never reach the core. Use the gesture buttons, or switch back to 2D.
+The choice is remembered in localStorage (`citizen-view`) and `?view=3d` forces it. `badge3d.js` and three.js
+0.160.0 (from cdnjs, with OrbitControls from jsDelivr) load on first use, so the 2D simulator never depends on
+the CDN. It needs WebGL; without it the error line shows `Error creating WebGL context` and the view stays 2D.
