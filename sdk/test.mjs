@@ -29,13 +29,13 @@ const bad = await sendMessage(base, slug, "");
 assert.equal(bad.error, "text must be 1-500 chars");
 console.log("chat 400 ok");
 
-const rows = await getTelemetry(base, slug, 1);
-assert.ok(Array.isArray(rows) && rows.length <= 1 && rows.every((r) => typeof r.at === "string"));
-console.log("telemetry ok", rows);
-// postTelemetry is a write to the real DB: 413 on an oversized body proves the request path without storing a row
-const big = await postTelemetry(base, slug, { pad: "x".repeat(2100) });
-assert.equal(big.error, "too large");
-console.log("telemetry 413 ok");
+// telemetry is not public any more: without the device key both reads and writes are refused
+const rows = await getTelemetry(base, slug);
+assert.ok("error" in rows, "telemetry GET without a key is refused");
+console.log("telemetry 401 ok");
+const post = await postTelemetry(base, slug, { hearts: 3 }, "not-the-key");
+assert.ok("error" in post, "telemetry POST with a wrong key is refused");
+console.log("telemetry post 401 ok");
 
 const fw = await latestFirmware(base);
 assert.ok("error" in fw || (typeof fw.version === "string" && fw.url.endsWith(`/firmware/${fw.file}`)));

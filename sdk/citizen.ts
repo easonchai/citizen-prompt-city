@@ -46,18 +46,21 @@ export function sendMessage(base: string, slug: string, text: string): Promise<C
   }).then((r) => json<ChatResponse>(r));
 }
 
-/** Store one telemetry object (the firmware's F3 line). Body must be a JSON object under 2048 bytes. */
-export function postTelemetry(base: string, slug: string, json_: Record<string, unknown>): Promise<{ ok: true } | ApiError> {
+/** Store one telemetry object (the firmware's F3 line). Needs the badge's device key (set on the badge with `token <key>`,
+ * shown on the admin page). Body must be a JSON object under 2048 bytes. */
+export function postTelemetry(base: string, slug: string, json_: Record<string, unknown>, deviceKey: string): Promise<{ ok: true } | ApiError> {
   return fetch(url(base, `${c(slug)}/telemetry`), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-badge-key": deviceKey },
     body: JSON.stringify(json_),
   }).then((r) => json<{ ok: true } | ApiError>(r));
 }
 
-/** The newest `n` telemetry rows (1..500, default 100), newest first. */
-export function getTelemetry(base: string, slug: string, n = 100): Promise<TelemetryRow[] | ApiError> {
-  return fetch(url(base, `${c(slug)}/telemetry?n=${n}`), { cache: "no-store" }).then((r) => json<TelemetryRow[] | ApiError>(r));
+/** The newest `n` telemetry rows (1..500, default 100), newest first. Telemetry is not public: pass the badge's
+ * device key, or call from a session that owns the badge or has admin basic auth. */
+export function getTelemetry(base: string, slug: string, n = 100, deviceKey?: string): Promise<TelemetryRow[] | ApiError> {
+  return fetch(url(base, `${c(slug)}/telemetry?n=${n}`), { cache: "no-store", headers: deviceKey ? { "x-badge-key": deviceKey } : {} })
+    .then((r) => json<TelemetryRow[] | ApiError>(r));
 }
 
 /** The published firmware build, or { error } when none is published. */

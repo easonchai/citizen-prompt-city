@@ -10,7 +10,7 @@ The badge firmware (`firmware/src/main.cpp`) is the reference client. It speaks 
 |---|---|---|
 | `getState(base, slug)` | `GET /api/c/<slug>/state` | `State`: `{ msg, checkin, name, updatedAt, now, error? }` |
 | `sendMessage(base, slug, text)` | `POST /api/c/<slug>/chat` | `{ reply }`, `{ reply: null, refused: true }` or `{ error }` |
-| `postTelemetry(base, slug, json)` | `POST /api/c/<slug>/telemetry` | `{ ok: true }` or `{ error }` |
+| `postTelemetry (needs the badge device key)(base, slug, json)` | `POST /api/c/<slug>/telemetry` | `{ ok: true }` or `{ error }` |
 | `getTelemetry(base, slug, n = 100)` | `GET /api/c/<slug>/telemetry?n=` | `TelemetryRow[]` (newest first) or `{ error }` |
 | `latestFirmware(base)` | `GET /api/firmware/latest` | `Firmware` or `{ error }` |
 
