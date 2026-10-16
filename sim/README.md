@@ -108,3 +108,34 @@ The box at the top of the right column refreshes every frame:
 - Power: `awake`, `light` or `deep`, plus `WiFi` when connected and `USB powered` in the desk scenario.
 - Badge clock: the core's own wall clock (HH:MM), or `unknown` before it has been set.
 - Brightness: the core's backlight percentage.
+
+## Scenarios
+
+![Desk day scenario running at 3600x; the badge has gone to deep sleep and the dimmed Sleep frame stays visible](../docs/sim/sim-2d.png)
+
+*`?scenario=desk` a few simulated minutes in. The pet has gone to sleep and the host has deep-slept the core, so the readouts say `off (deep sleep)` and the Sleep frame is shown dimmed rather than black.*
+
+A scenario resets the badge, forces host sleep to Deep and the sync interval to 60 s, sets the badge clock, runs
+at 3600x with recording on, and pauses when its length is up. Three presets:
+
+| Scenario | Clock | WiFi | Interactions | Length |
+|---|---|---|---|---|
+| Desk day | 09:00 | off | 10 taps/h | 8 h, marked USB powered |
+| Event day | 10:00 | on | 60 taps/h | 10 h |
+| Forgotten | 20:00 | off | none | 72 h |
+
+Interactions arrive at random with Poisson spacing at the chosen rate in simulated time. You can edit
+Interactions / h at any time. A tap that lands while the badge is asleep wakes it instead of being a tap, so in
+Event day the number of wakes per hour is below 60 (the selftest prints `wakes_per_h`).
+
+Host sleep decides what the simulated host does when the core reports `cz_wants_sleep`:
+
+- Deep (F4): the host saves the 64-byte blob, powers the core off and stops ticking it. The next touch calls
+  `cz_init` with the blob and the number of seconds slept, so the pet catches up on the time away. That waking
+  touch is consumed. The radio is off; the first sync happens on wake.
+- Light (F4 fallback): the core keeps running at the light-sleep current. A touch sends a tap to move from the
+  Sleep screen back to Home. No syncs while asleep.
+- None: nothing sleeps. The Sleep screen stays lit at the awake current and the periodic sync keeps going.
+
+At 1x the screen goes black while asleep, like the real backlight. At higher speeds the sleep and wake cycle would
+strobe, so the dimmed Sleep frame is kept visible at 10% instead.
