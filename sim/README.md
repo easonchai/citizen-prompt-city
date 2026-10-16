@@ -176,3 +176,26 @@ name appears in the status line:
 
 The running version (1.1.0) and the WiFi state (`PromptKL`, connected or off) are fed to the core on boot, after
 every re-init and whenever the WiFi toggle changes, the way the firmware does after `cz_init`.
+
+## WiFi and sync
+
+The sync policy is the firmware's F6: one sync at boot and at every wake, then one every Sync interval seconds
+(60 by default) while awake, and none while asleep. Sleeping cancels the timer; the next wake restarts it.
+
+- Connected: tells the core the WiFi state and, when switched on, syncs immediately.
+- Sync every (s): the interval, minimum 1. Scenarios force it back to 60.
+- Queue message: holds the "Message from the web" text (up to 64 characters) until the next sync, then delivers
+  it with `cz_message`. Queue check-in does the same with `cz_checkin("KL")`.
+- A sync while the badge is still on the Hatch screen keeps the content queued, because the core ignores it
+  during Hatch.
+
+Each sync charges the power model with one TX burst (see the hardware model) and bumps the `syncs` counter in the
+Nerd panel.
+
+## Live mode
+
+Live mode makes the simulated badge follow a real one. With the box ticked, the simulator fetches `<badge url>/state`
+every 10 s of real time (`cache: no-store`) and expects JSON with optional string fields `msg` and `checkin`. When
+either value changes it is delivered to the core (cut to 64 characters); if the badge is asleep or still hatching
+it is queued for the next sync instead. The line under the box reads `live: ok HH:MM:SS` after each successful
+poll, or the error. The default url is `https://prmpt.city/api/c/tenuk`.
