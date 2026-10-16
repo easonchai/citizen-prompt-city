@@ -46,3 +46,19 @@ Every screen is 240x240, the badge's native resolution. `screens/<name>.png` is 
 | ![Tiger play](screens/tiger-play-4x.png) Play: swipe, the hop and the ball | ![Tiger cheer](screens/tiger-cheer-4x.png) Cheer: checked in at the venue | |
 
 The design source of truth for these is `../SCREEN_DESIGN_SOURCE.html`; the running core renders the same screens into `tests/out/*.ppm` under `make test`.
+
+## Palette
+
+The nine brand colours from `core/gfx.c`. Swatches in `palette/` are 24x24 PNGs made with ImageMagick: `magick -size 24x24 xc:#141c3a palette/navy.png`.
+
+| Swatch | Name | Hex | Used for |
+|---|---|---|---|
+| ![navy](palette/navy.png) | navy | `#141c3a` | night sky |
+| ![dusk](palette/dusk.png) | dusk | `#1e2a58` | horizon |
+| ![deep](palette/deep.png) | deep | `#0a0e1f` | city and ground |
+| ![cream](palette/cream.png) | cream | `#f6f1e4` | text and outlines |
+| ![gold](palette/gold.png) | gold | `#f0b840` | windows, events, the band |
+| ![coral](palette/coral.png) | coral | `#f06a5a` | hearts |
+| ![teal](palette/teal.png) | teal | `#2bb8a8` | secondary |
+| ![pink](palette/pink.png) | pink | `#f4a3b5` | sprites only |
+| ![sky](palette/sky.png) | sky | `#5aa9e6` | day sky |
