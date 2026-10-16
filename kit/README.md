@@ -2,6 +2,8 @@
 
 A thank-you from PROMPT:KL, 31 October 2026.
 
+![First page of the booklet](img/booklet-cover.png)
+
 ## What is in the box
 
 - The Citizen badge: a round touch screen with your pixel citizen inside
@@ -32,10 +34,13 @@ A small virtual pet on a round smart badge. Your citizen is one of three animals
 | Path | What |
 |---|---|
 | `booklet.pdf` | The 8-page A5 guide. Print it or send it |
+| `booklet/index.html` | The booklet's source. One HTML page per printed page, images from `img/` |
 | `thank-you/<slug>.pdf` | One A6 card per speaker, front and back |
+| `thank-you/index.html`, `thank-you/make.mjs` | The card template and the script that fills it from `web/seed/badges.json` into `thank-you/build/` |
 | `how-sync-works.md` | How the badge and the website talk to each other |
-| `videos/` | The teaser and the launch film |
-| `renders/` | Hero, flat lay, badge on a shirt, and the other launch images |
+| `img/` | The images the booklet and cards use: `hero.jpg`, `board.jpg`, 4x screens, 8x idle sprites, `booklet-cover.png` |
+| `preview/` | PNG previews of the booklet and card pages |
+| `videos/`, `renders/` | The teaser, the launch film and the launch renders, copied in by `build.sh` and not committed. The originals are in `../assets/` |
 
 ## Getting help
 
@@ -47,4 +52,17 @@ Start with the last page of the booklet. If that does not fix it, message the PR
 kit/build.sh
 ```
 
-Needs Google Chrome, Node, ImageMagick and `web/node_modules` installed. It prints `booklet.pdf` and every card from `web/seed/badges.json`, and copies the renders and videos.
+Needs Google Chrome, Node, ImageMagick and `web/node_modules` installed, plus the art folders next to the repo (`screens/`, `sprites/`, `assets/`, `ref/` in `citizen-badge/`) and `tests/out/home_*.ppm` from `make test`. It:
+
+1. Makes the print images in `img/`: idle sprites upscaled 8x (64 to 512 px) and screens upscaled 4x (240 to 960 px), both nearest-neighbour; the four time-of-day Home screens from the core's test output; `board.jpg` (2K) and `hero.jpg` from the v2 renders.
+2. Copies the eight launch renders into `renders/` and the teaser and launch film into `videos/`.
+3. Prints `booklet.pdf` from `booklet/index.html` with headless Chrome.
+4. Runs `thank-you/make.mjs` to fill one card per badge in `web/seed/badges.json`, then prints each to `thank-you/<slug>.pdf`.
+
+The cover image above is a plain screenshot of the booklet's first page:
+
+```sh
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu \
+  --window-size=900,1200 --virtual-time-budget=6000 \
+  --screenshot="$PWD/kit/img/booklet-cover.png" "file://$PWD/kit/booklet/index.html"
+```
