@@ -1,0 +1,15 @@
+name: check
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install platformio intelhex
+      - run: sudo apt-get update && sudo apt-get install -y clang lld imagemagick
+      - uses: browser-actions/setup-chrome@v1
+      - name: core tests, soak, bench, wasm, ESP32-C3 size budget, simulator selftest
+        env: { CHROME: chrome }
+        run: bash scripts/check.sh
