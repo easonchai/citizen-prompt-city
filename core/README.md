@@ -233,3 +233,18 @@ The same table lives in `tools/pack_sprites.py`, which quantises the PNG sprites
 | 60 | 4 | FNV-1a checksum of bytes 0..59 |
 
 `restore` rejects a blob when the magic, version, checksum or any range check fails, and `cz_init` then hatches a fresh pet. The firmware reads the name straight out of bytes 16..26 because the core has no name getter.
+
+## Build and test
+
+Targets are in the top-level `Makefile`. The core compiles with `clang -std=c99 -Wall -Wextra -Werror -O1 -fno-common`; bench and soak use `-O2` because they measure speed (the firmware itself is built `-Os` by Arduino).
+
+| Command | What it does |
+|---|---|
+| `make test` | Builds `tests/test_core` and runs it: flow, save and restore, every screen, telemetry, brightness, Settings, clock, QR geometry, dismiss, dither, Hatch rise, animation bounds, double tap undo. Writes every screen to `tests/out/*.ppm`. Ends with `all core tests passed`. |
+| `make bench` | Per-screen cost table (below) and an ESP32-C3 estimate. |
+| `make soak` | 7 simulated days of badge life: seeded random gestures at an event-day rate, chat messages, a check-in, an hourly save and init round trip, a nightly 8 h deep sleep. Every frame is range checked and redrawn to prove determinism. Ends with `SOAK PASSED`. |
+| `make wasm` | Builds `sim/core.wasm` with Homebrew LLVM (`/opt/homebrew/opt/llvm/bin/clang`, `wasm-ld` from the `lld` formula), `-DCZ_FREESTANDING -DNDEBUG`, exporting every `cz_*` declared in `citizen.h`. |
+| `make frames` | Renders the launch-film screen sequences from `video/render_frames.c`. |
+| `scripts/check.sh` | Runs clean, test, soak, bench, wasm, then `pio run -e citizen` and fails if flash exceeds `FLASH_BUDGET` (default 1,700,000 bytes) or static RAM exceeds `RAM_BUDGET` (default 200,000 bytes), then the browser simulator's headless selftest. Run it before every push; CI runs the same. |
+
+Last run, 16 Oct 2026: `make test` wrote 23 screens and passed. `make soak` ran 524,669 ticks and 347,157 frames in 26.26 s of wall time, with 1,166 gestures, 35 messages, 1 check-in, 112 hourly round trips and 7 deep sleeps, hearts between 0 and 4, every screen visited.
