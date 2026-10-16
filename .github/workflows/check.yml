@@ -1,15 +1,27 @@
 name: check
 on: [push, pull_request]
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true   # a newer push cancels the older run, so minutes are never spent twice
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10      # hard cap; typical run is 4 to 5 minutes
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
       - run: pip install platformio intelhex
       - run: sudo apt-get update && sudo apt-get install -y clang lld imagemagick
       - uses: browser-actions/setup-chrome@v1
       - name: core tests, soak, bench, wasm, ESP32-C3 size budget, simulator selftest
         env: { CHROME: chrome }
+        timeout-minutes: 8
         run: bash scripts/check.sh
