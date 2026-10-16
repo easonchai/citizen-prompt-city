@@ -303,12 +303,14 @@ static void test_settings(void) {
     quick_tap(); quick_tap();
     CHECK(cz_screen() == CZ_S_SETTINGS);
     check_and_write("settings");
-    swipe(1); CHECK(cz_brightness() == 40);  /* brightness applies at once, by swipe */
-    swipe(1); CHECK(cz_brightness() == 10);
-    swipe(-1); CHECK(cz_brightness() == 40);
-    right(); right(); CHECK(cz_brightness() == 100); /* or by tapping the arrows */
-    left(); CHECK(cz_brightness() == 10);
+    swipe(-1); CHECK(cz_brightness() == 40); /* brightness applies at once, by swipe; left = dimmer */
+    swipe(-1); CHECK(cz_brightness() == 10);
+    swipe(-1); CHECK(cz_brightness() == 10); /* stops at the ends, never wraps */
+    swipe(1); CHECK(cz_brightness() == 40);
+    right(); CHECK(cz_brightness() == 100);  /* or by tapping the arrows */
     right(); CHECK(cz_brightness() == 100);
+    left(); left(); CHECK(cz_brightness() == 10);
+    right(); right(); CHECK(cz_brightness() == 100);
     down();                                  /* Clock */
     right(); CHECK(cz_clock() == 12 * 60 + 15);
     left(); left(); CHECK(cz_clock() == 11 * 60 + 45);
@@ -330,7 +332,7 @@ static void test_settings(void) {
     vswipe(1);                               /* swipe down goes back up the wheel: WiFi */
     right(); CHECK(cz_host_request() == CZ_REQ_PORTAL);
     up(); up(); up(); up();                  /* Citizen, Timezone, Clock, Brightness */
-    right(); CHECK(cz_brightness() == 40);
+    left(); CHECK(cz_brightness() == 40);
     CHECK(cz_screen() == CZ_S_SETTINGS);
     hold(); CHECK(cz_screen() == CZ_S_HOME); /* hold exits */
 

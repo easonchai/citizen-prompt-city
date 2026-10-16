@@ -216,12 +216,13 @@ static void gesture_tap(int x, int y, uint32_t now) {
 
 /* Settings swipe: dir +1 (right) changes forward or activates, -1 (left) changes back. */
 static void setting_change(int dir) {
-    static const int bright[3] = {100, 40, 10};
+    static const int bright[3] = {10, 40, 100}; /* right = brighter, stops at the ends */
     int i, m;
     switch (S.sel) {
     case SET_BRIGHT:
         for (i = 0; i < 2 && bright[i] != S.brightness; i++) {}
-        S.brightness = bright[(i + (dir > 0 ? 1 : 2)) % 3];
+        if (dir > 0 && i < 2) i++; else if (dir < 0 && i > 0) i--;
+        S.brightness = bright[i];
         break;
     case SET_CLOCK:
         m = S.clock_known ? (int)(S.day_ms / MIN_MS) : 0;
