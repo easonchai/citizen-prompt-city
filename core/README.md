@@ -274,3 +274,36 @@ Two things to read from it: the SPI push of a full frame costs more than any scr
 ## Portrait mode
 
 `cz_set_portrait(1)` turns the core into a picture of the pet for the web page: it marks the pet hatched, sets 4 hearts, jumps to Home, and from then on draws Home without the hearts row or the action icons. Touch events are ignored, so nothing can feed, play or open Settings, and the 30 s idle timer never puts it to sleep. The breath animation, the name footer and the day and night sky still run, so the web portrait matches what the badge shows. `cz_set_portrait(0)` restores normal behaviour.
+
+## Settings wheel
+
+Opened by a double tap on Home or Sulk. A vertical wheel of eight rows: the previous row in ink at y 48, the selected row and its value in gold at y 84 and 108, the next row at y 140, with triangles above and below. Rows in order: BRIGHTNESS, CLOCK, TIMEZONE, CITIZEN, WIFI, UPDATE, ABOUT, EXIT. The wheel wraps.
+
+Touch zones, from `settings_tap`:
+
+| Touch | Effect |
+|---|---|
+| Tap above y 70 (top third) | Move up one row |
+| Tap below y 125 (bottom third) | Move down one row |
+| Tap on the selected row, x below 80 | Change the value back |
+| Tap on the selected row, x 80 or more (centre or right) | Change the value forward, or activate the row |
+| Horizontal swipe | Same as a value tap: right forward, left back |
+| Vertical swipe | Swipe up selects the next row, swipe down the previous |
+| Double tap | Leave; the first tap's value change is dropped |
+| Hold 1 s | Leave |
+| 20 s idle | Leave |
+
+A value tap is held for 400 ms before it applies so a double tap can cancel it. Arrows on the value row show which directions are live: both for Brightness, Clock, Timezone and Citizen; right only for WiFi, Update and Exit; none for About.
+
+| Row | Value shown | Back | Forward |
+|---|---|---|---|
+| BRIGHTNESS | 10, 40 or 100 | Dimmer, stops at 10 | Brighter, stops at 100 |
+| CLOCK | HH:MM or `--:--` | Back 15 min (to the previous quarter hour) | Forward to the next quarter hour. Either sets the clock to known. |
+| TIMEZONE | UTC+8 style | -1 h, floor -12 | +1 h, ceiling 14. The local clock moves with it. |
+| CITIZEN | TENUK, KENYALANG or HARIMAU | Previous creature | Next creature. Changes the name to the default. |
+| WIFI | NOT SET, or the SSID plus OFF, CONNECTING, OK or FAIL | nothing | Raises `CZ_REQ_PORTAL` |
+| UPDATE | V<running> then NEW <version> or UP TO DATE | nothing | Raises `CZ_REQ_CHECK_UPDATE`, or `CZ_REQ_INSTALL_UPDATE` once the host has reported a newer version |
+| ABOUT | V<running> and the last path segment of the QR URL (the slug) | nothing | nothing |
+| EXIT | | nothing | Leave Settings |
+
+Changes to brightness, clock, timezone and creature apply immediately in the core; the firmware watches `cz_brightness`, `cz_timezone` and `cz_creature` each loop and persists what changed.
