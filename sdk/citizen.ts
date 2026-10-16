@@ -64,3 +64,28 @@ export function getTelemetry(base: string, slug: string, n = 100): Promise<Telem
 export function latestFirmware(base: string): Promise<Firmware | ApiError> {
   return fetch(url(base, "/api/firmware/latest"), { cache: "no-store" }).then((r) => json<Firmware | ApiError>(r));
 }
+
+
+// ---- the collection API (public, CORS open, no personal data): build worlds, dashboards and collections on it
+export type PublicCitizen = {
+  slug: string; name: string; creature: string; speaker: string; bio: string; links: { label: string; url: string }[];
+  city: string; born: string; hearts: number | null; lastSeen: string | null;
+  places: { slug: string; name: string; at: string }[];
+  unlocks: { key: string; kind: string; name: string; art: string | null; reason: string; at: string }[];
+};
+export type Place = { slug: string; name: string; city: string; country: string; kind: string; unlocks: string[]; checkins: number };
+export type Unlock = { key: string; kind: string; name: string; description: string; art: string | null; holders: number };
+
+async function getJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  return res.json() as Promise<T>;
+}
+/** Every citizen, public fields only. */
+export const listCitizens = (base: string) => getJson<PublicCitizen[]>(`${base}/api/citizens`);
+/** One citizen with its places and unlocks. */
+export const getCitizen = (base: string, slug: string) => getJson<PublicCitizen>(`${base}/api/citizens/${encodeURIComponent(slug)}`);
+/** Places a citizen can check in at and what each grants. */
+export const listPlaces = (base: string) => getJson<Place[]>(`${base}/api/places`);
+/** The unlock catalog. */
+export const listUnlocks = (base: string) => getJson<Unlock[]>(`${base}/api/unlocks`);

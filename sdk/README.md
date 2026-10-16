@@ -56,3 +56,19 @@ cd web && set -a; . ./.env.local; set +a; pnpm build && pnpm start -p 3110 &
 node sdk/test.mjs                      # defaults: http://localhost:3110 tenuk-d2e8
 node sdk/test.mjs http://localhost:3110 kenyalang-b7c2
 ```
+
+
+## Build on Citizen
+
+The collection API is public, CORS is open, and it never returns personal data: no emails, no keys, no device telemetry, no private notes. It is meant for other people's worlds, dashboards and collections.
+
+```ts
+import { listCitizens, getCitizen, listPlaces, listUnlocks } from "./citizen";
+const base = "https://connect.prmpt.city";
+const everyone = await listCitizens(base);        // slug, name, creature, speaker, bio, links, born, hearts, places, unlocks
+const tenuk = await getCitizen(base, "tenuk-d2e8");
+const places = await listPlaces(base);             // where a citizen can check in and what it earns there
+const catalog = await listUnlocks(base);           // every background, creature and stamp, with holder counts
+```
+
+How a citizen earns things: it is born with its creature and the Kuala Lumpur sky; checking in at a place (the organiser does this from the admin page) grants that place's unlocks, so a citizen that travels collects skies and stamps. Unlocks marked with no art are catalogued but not drawn yet; the badge firmware does not render them until the art exists.
