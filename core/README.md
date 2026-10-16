@@ -210,3 +210,26 @@ Fifteen entries, `enum cz_color` in `citizen.h`, RGB in `cz_pal_rgb` and RGB565 
 | 14 | `CZ_C_CLOUD` | `#eef3ff` | day clouds |
 
 The same table lives in `tools/pack_sprites.py`, which quantises the PNG sprites to these indices.
+
+## Save blob
+
+`cz_save` writes exactly `CZ_SAVE_SIZE` = 64 bytes. Multi-byte fields are little endian. The host stores it opaquely (the firmware keeps it in Preferences under `save`) and hands it back to `cz_init`.
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 2 | Magic `'C'`, `'Z'` |
+| 2 | 1 | Version, 3. Version 2 blobs (pre-clock firmware) still restore with timezone 8 and clock unknown. |
+| 3 | 1 | Creature, 0..2 |
+| 4 | 1 | Hearts, 0..4 |
+| 5 | 1 | Hatched flag |
+| 6 | 1 | Hearts lost since the last feed, 0..4 |
+| 7 | 1 | Brightness, 100, 40 or 10 |
+| 8 | 4 | Seconds since the last feed |
+| 12 | 4 | Seconds since the last rewarded play |
+| 16 | 11 | Name, NUL terminated, at most 10 characters (byte 26 is always 0) |
+| 27 | 1 | Timezone + 12, so 0..26 |
+| 28 | 4 | Seconds since local midnight, or `0xFFFFFFFF` when the clock is unknown |
+| 32 | 28 | Zero |
+| 60 | 4 | FNV-1a checksum of bytes 0..59 |
+
+`restore` rejects a blob when the magic, version, checksum or any range check fails, and `cz_init` then hatches a fresh pet. The firmware reads the name straight out of bytes 16..26 because the core has no name getter.
