@@ -65,3 +65,28 @@ If the badge is not detected, hold BOOT while plugging in USB to enter the ROM d
 | coredump | 0x3F0000 | 64 KB |
 
 Two app slots are what make OTA possible: a new build is written to the idle slot and booted on success. nvs keeps the same offset as the earlier `huge_app.csv` layout, so Preferences (the save blob, WiFi credentials, settings) survived the switch and survive every update.
+
+## Serial console
+
+Lines over USB CDC at 115200, one command per line, from `run_command` in `main.cpp`. Most answer `ok`; an unknown command prints the full list. Settings that persist go to Preferences namespace `citizen`.
+
+| Command | Effect |
+|---|---|
+| `name X` | Set the pet's name (prefs `name`). |
+| `creature N` | 0 tapir, 1 hornbill, 2 tiger (prefs `creature`). Resets the QR slug to the creature default and saves. |
+| `prompt ...` | The speaker's system prompt typed out on Hatch (prefs `prompt`). |
+| `wifi SSID PASS` | Store credentials (prefs `ssid`, `pass`) and restart. |
+| `url BASE` | Server base URL (prefs `base`), e.g. `https://connect.prmpt.city`. Rebuilds the QR URL. |
+| `slug S` | Badge slug (prefs `slug`). The QR and API paths become `<base>/c/<slug>`. |
+| `msg ...` | Show a Talk message now. |
+| `checkin [CITY]` | Show a Check-in, default KL. |
+| `brightness 100|40|10` | Backlight level; stored in the core's save blob. |
+| `time HH:MM` | Set the local clock and save. |
+| `tz N` | Timezone -12..14 (prefs `tz`); re-anchors the clock from SNTP. |
+| `version` | Print `CZ_VERSION`. |
+| `update` | Check `<base>/api/firmware/latest` and install if newer (WiFi builds). |
+| `autoupdate 0|1` | Allow the idle automatic install (prefs `autoupd`, default 1). |
+| `stats` | Print the last telemetry line. |
+| `reset` | Clear every preference and the RTC re-fire guards, then restart. The pet hatches again. |
+
+The badge also prints one telemetry JSON line per second on its own (see Sync) and `boot: first frame at N ms` on startup.
