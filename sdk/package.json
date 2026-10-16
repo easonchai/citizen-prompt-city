@@ -1,0 +1,11 @@
+{
+  "name": "@prmpt/citizen-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dependency-free TypeScript client for the Citizen badge web API",
+  "exports": "./citizen.ts",
+  "scripts": {
+    "test": "node test.mjs"
+  }
+}
