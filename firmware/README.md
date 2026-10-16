@@ -161,3 +161,17 @@ Wake: deep sleep reboots the chip. `setup` diffs the RTC clock against the stamp
 Fallback: build with `-DCZ_LIGHT_SLEEP_FALLBACK` if level wake from deep sleep proves unreliable. Light sleep (about 0.13 mA, RAM kept) wakes on touch INT low, BOOT low, or a 2 s timer; on a timer wake it polls the touch controller and goes back to sleep if nothing is pressed, then reloads the pet without a reboot.
 
 Backlight: `cz_brightness` (100, 40 or 10) maps to PWM at 44.1 kHz on GPIO 3; it is applied only when it changes.
+
+## Size budget
+
+Verified build, 16 Oct 2026, firmware 1.1.0 with WiFi, HTTP, captive portal, OTA, LovyanGFX and all sprites (`pio run -e citizen`):
+
+| | Used | Of | |
+|---|---|---|---|
+| Flash | 1,171,402 bytes | 1,966,080 bytes (one OTA app slot) | 59.6 percent |
+| RAM (static) | 108,956 bytes | 327,680 bytes | 33.3 percent |
+| `firmware.bin` | 1,218,768 bytes | | |
+
+The core's share: the framebuffer is 57,600 bytes static, the sprites 98,304 bytes in flash (3 creatures x 8 poses x 64x64), and the push path uses two 3,840-byte line buffers (8 rows of RGB565, ping-pong so DMA overlaps the palette conversion). No 16-bit full-frame buffer is ever allocated.
+
+`scripts/check.sh` enforces the budget. It runs the core tests, soak, bench and wasm build, then `pio run -e citizen`, parses the `RAM:` and `Flash:` lines, and fails if flash exceeds `FLASH_BUDGET` (default 1,700,000 bytes, leaving room to grow inside the slot) or static RAM exceeds `RAM_BUDGET` (default 200,000 bytes). Both are environment variables. Run it before every push; CI runs the same script.
