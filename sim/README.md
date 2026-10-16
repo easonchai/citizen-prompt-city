@@ -23,3 +23,16 @@ can be fetched. `make wasm` needs `/opt/homebrew/opt/llvm/bin/clang` and `wasm-l
 
 `scripts/check.sh` builds the wasm and runs the simulator selftest headlessly on port 8790 as part of the
 repo-wide check.
+
+## Files
+
+- `index.html`: the page. Round bezel and screen canvas on the left, control panels on the right.
+- `sim.js`: wasm host, simulated clock, gestures, scenarios, WiFi and sleep model, telemetry, CSV, selftest.
+- `model.js`: the hardware model. Pure functions over a `hardware.json` profile: frame cost, current, sync charge,
+  temperature, battery hours.
+- `hardware.json`: the ESP32-C3 / ESP32-2424S012C profile. Every number is editable live under Nerd > Hardware constants.
+- `badge3d.js`: the 3D badge view, loaded only when you switch to it.
+- `core.wasm`: built by `make wasm`, not committed.
+
+`window.cz` exposes the wasm exports and `window.sim` the simulator internals (`sim`, `hw`, `gesture`, `advanceTo`,
+`runScenario`, `toCsv`, `importLog`) for poking from the console.
