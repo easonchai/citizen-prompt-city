@@ -72,3 +72,19 @@ The ESP32-2424S012C, the "ESP32-C3 1.28 inch round touch display with case". Ven
 | ![Onboard](ref/onboard.png) Onboard parts | ![Battery](ref/battery.png) Battery header (unused, the badge runs on USB-C) | ![Product](ref/product.jpg) Listing photo |
 
 Listing photos in `ref/ws-*.jpg`: the bare board (`ws-bare-1` to `ws-bare-3`), the case (`ws-case-1` to `ws-case-5`, `ws-case-details-5`, `ws-case-front`, `ws-case-size`).
+
+## Proposal
+
+[Citizen-proposal.pdf](proposal/Citizen-proposal.pdf), nine pages: the pitch to PROMPT:KL for a pixel pet badge as the speaker gift, with the three creatures, the screens, the board and the plan. `proposal/index.html` is the source it was printed from.
+
+## Film
+
+[citizen-launch-v1.mp4](film/citizen-launch-v1.mp4), 1920x1080, 24 fps, 54 s, 31 MB, silent (no licensed music track yet). How it is made: [../video/README.md](../video/README.md).
+
+![Poster frame at 10 s: Meet Tenuk](film/poster.png)
+
+Poster frame: `ffmpeg -ss 00:00:10 -i film/citizen-launch-v1.mp4 -frames:v 1 film/poster.png`.
+
+## Licence
+
+Code in this repository is MIT. Everything in `assets/` (sprites, sheets, renders, screens, the proposal and the film) is CC BY-NC 4.0: share and adapt for non-commercial use with attribution to the Citizen contributors. Full text in [../LICENSE](../LICENSE).
