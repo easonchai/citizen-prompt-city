@@ -31,6 +31,7 @@ struct cz_view {
     const char *name, *prompt, *msg, *city, *url;
     const char *set_prev, *set_label, *set_value, *set_next; /* Settings rows */
     int set_arrows;                                   /* Settings value row: bit 0 draws the left arrow, bit 1 the right */
+    int portrait;                                     /* Home as a portrait: no hearts, no action icons */
 };
 void cz_draw(const struct cz_view *v);
 

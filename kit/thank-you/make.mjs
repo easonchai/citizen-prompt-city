@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..');
 const QRCode = createRequire(join(repo, 'web', 'package.json'))('qrcode');
 // Same base as the firmware's CZ_DEFAULT_BASE (firmware/platformio.ini); change both when the prmpt.city subdomain exists.
-const SITE = 'https://citizen-eason-chai-jun-weis-projects.vercel.app';
+const SITE = 'https://connect.prmpt.city';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const tpl = readFileSync(join(here, 'index.html'), 'utf8');

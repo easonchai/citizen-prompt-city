@@ -46,6 +46,7 @@ static struct {
     int brightness;
     int tap_home; /* the last tap landed on Home or Sulk, so a quick second tap opens Settings */
     int tap_set;  /* the last tap landed on Settings, so a quick second tap leaves it */
+    int portrait; /* the web page's portrait of the pet: not a device, so no hearts, touch or sleep */
     int pending, pending_dir; uint32_t pending_ms; /* a Settings value tap waits DOUBLE_TAP_MS so a double tap can cancel it */
     /* clock and settings */
     int clock_known, tz, sel, wifi_state;
@@ -140,7 +141,7 @@ static void advance(uint32_t now) {
     }
     if (S.screen == CZ_S_HOME && sulking()) S.screen = CZ_S_SULK;
     if (S.screen == CZ_S_SULK && !sulking()) S.screen = CZ_S_HOME;
-    if ((S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) && S.idle_ms >= IDLE_SLEEP_MS) go(CZ_S_SLEEP);
+    if ((S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) && S.idle_ms >= IDLE_SLEEP_MS && !S.portrait) go(CZ_S_SLEEP);
     if (S.screen == CZ_S_SETTINGS && S.idle_ms >= SETTINGS_IDLE_MS) go(base_screen());
     if (S.pending && (S.screen != CZ_S_SETTINGS || now - S.pending_ms >= DOUBLE_TAP_MS)) {
         S.pending = 0;
@@ -258,6 +259,7 @@ static void gesture_vswipe(int down) {
 void cz_touch(int kind, int x, int y, uint32_t now_ms) {
     int dx = x - S.x0, dy = y - S.y0, d, dir = dx > 0 ? 1 : -1, down = dy > 0;
     advance(now_ms);
+    if (S.portrait) return;
     S.idle_ms = 0;
     if (kind == CZ_TOUCH_DOWN) {
         S.down = 1; S.consumed = 0; S.x0 = x; S.y0 = y; S.maxd = 0; S.t0 = now_ms;
@@ -356,6 +358,11 @@ void cz_init(uint32_t seed, const uint8_t *saved, int saved_len, uint32_t slept_
     go(S.hatched ? base_screen() : CZ_S_HATCH);
 }
 
+void cz_set_portrait(int on) {
+    S.portrait = on;
+    if (on) { S.hatched = 1; S.hearts = 4; go(CZ_S_HOME); }
+    S.stale = 1;
+}
 void cz_set_creature(int creature) {
     if (creature < 0 || creature >= CZ_CREATURES) return;
     S.creature = creature;
@@ -503,6 +510,7 @@ static void render_if_needed(void) {
     v.screen = S.screen; v.creature = S.creature; v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
     v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url; v.phase = phase();
     v.anim = S.screen == CZ_S_HATCH ? 0 : anim();
+    v.portrait = S.portrait;
     if (S.screen == CZ_S_SETTINGS) {
         v.set_prev = SET_LABEL[(S.sel + SET_N - 1) % SET_N]; v.set_label = SET_LABEL[S.sel];
         v.set_next = SET_LABEL[(S.sel + 1) % SET_N]; v.set_value = setting_value();

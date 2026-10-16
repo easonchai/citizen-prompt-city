@@ -134,7 +134,11 @@ static void line_text(char *buf, const char *s, const uint8_t *ln) {
 
 static int slen(const char *s) { int n = 0; while (s[n]) n++; return n; }
 
-static void home(const struct cz_view *v) { skyline(); sprite(v, 56, 44 + BOB[v->anim & 3]); hearts(v->hearts); actions(-1); footer(v->name); }
+static void home(const struct cz_view *v) {
+    skyline(); sprite(v, 56, 44 + BOB[v->anim & 3]);
+    if (!v->portrait) { hearts(v->hearts); actions(-1); }
+    footer(v->name);
+}
 
 static void eat(const struct cz_view *v) {
     int i;
@@ -188,8 +192,8 @@ static void qr(const struct cz_view *v) {
             for (c = 0; c < n; c++)
                 if (qrcodegen_getModule(code, c, r)) cz_rect(ox + c * m, oy + r * m, m, m, CZ_C_DEEP);
     } /* a URL too long for version 5 draws no code; the banner still shows */
-    cat(with, sizeof with, "WITH ", v->name);
-    banner("SCAN TO CHAT", with);
+    cat(with, sizeof with, "CHAT WITH ", v->name);
+    banner(with, "CONNECT.PRMPT.CITY"); /* the brand and the fallback for anyone who cannot scan */
 }
 
 static void cheer(const struct cz_view *v) {

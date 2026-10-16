@@ -15,7 +15,7 @@ The badge never waits on the web. It pulls news when it is awake and on WiFi, an
 
 ## The steps
 
-1. The badge stores a server base URL (default `https://citizen-eason-chai-jun-weis-projects.vercel.app` until the prmpt.city subdomain exists) and its slug. The QR on the badge encodes `<base>/c/<slug>`.
+1. The badge stores a server base URL (default `https://connect.prmpt.city` until the prmpt.city subdomain exists) and its slug. The QR on the badge encodes `<base>/c/<slug>`.
 2. When WiFi credentials exist, it tries to connect for at most 8 seconds at every boot and every wake from deep sleep.
 3. Right after connecting it polls `GET <base>/api/c/<slug>/state`, then again every 60 seconds while awake. Nothing happens while it sleeps.
 4. The response looks like `{"msg":"...","checkin":"KL","name":"...","updatedAt":"...","now":"..."}`. `now` sets the badge clock.

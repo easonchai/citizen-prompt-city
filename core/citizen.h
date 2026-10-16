@@ -39,6 +39,7 @@ void cz_touch(int kind, int x, int y, uint32_t now_ms);   /* raw touch; core det
 
 /* Content the host sets. */
 void cz_set_creature(int creature);
+void cz_set_portrait(int on);                 /* web page portrait: Home without hearts or actions, ignores touch, never sleeps */
 void cz_set_name(const char *name);           /* shown in gold under the pet, uppercase, <= 10 chars */
 void cz_set_prompt(const char *prompt);       /* the speaker's system prompt, typed out on Hatch */
 void cz_set_qr_url(const char *url);          /* encoded on the QR screen */
