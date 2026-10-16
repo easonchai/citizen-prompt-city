@@ -391,6 +391,7 @@ static void wifi_poll() {
   }
   if (!first && tl_line[0] && http.begin(api + "/telemetry")) {  // F6: last F3 line, once a minute while awake
     http.addHeader("Content-Type", "application/json");
+    http.addHeader("X-Badge-Key", prefs.getString("token", ""));  // server answers 401 without it
     http.POST((uint8_t *)tl_line, strlen(tl_line));
     http.end();
   }
