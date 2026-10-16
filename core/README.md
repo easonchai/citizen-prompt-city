@@ -248,3 +248,25 @@ Targets are in the top-level `Makefile`. The core compiles with `clang -std=c99 
 | `scripts/check.sh` | Runs clean, test, soak, bench, wasm, then `pio run -e citizen` and fails if flash exceeds `FLASH_BUDGET` (default 1,700,000 bytes) or static RAM exceeds `RAM_BUDGET` (default 200,000 bytes), then the browser simulator's headless selftest. Run it before every push; CI runs the same. |
 
 Last run, 16 Oct 2026: `make test` wrote 23 screens and passed. `make soak` ran 524,669 ticks and 347,157 frames in 26.26 s of wall time, with 1,166 gestures, 35 messages, 1 check-in, 112 hourly round trips and 7 deep sleeps, hearts between 0 and 4, every screen visited.
+
+## Frame cost
+
+`make bench` on 16 Oct 2026, native `-O2` on a Mac. Each row is the median of 5 runs of 2000 forced full redraws. `esp_est_ms` multiplies the native time by `CZ_SLOWDOWN` (default 120, a placeholder for a 160 MHz single-issue RISC-V against this Mac; override with the env var and replace it with the firmware's measured `frame_ms` once hardware exists). `push_ms` is the SPI cost of the dirty rows at 40 MHz plus 40 us per 8-row chunk. `fps` is capped at the 30 Hz the firmware runs at.
+
+```
+case           native_us   rows   push_ms esp_est_ms   total_ms    fps
+hatch              4.490    240    24.240      0.539     24.779   30.0
+home              11.340    240    24.240      1.361     25.601   30.0
+feed              11.993    240    24.240      1.439     25.679   30.0
+play              11.678    240    24.240      1.401     25.641   30.0
+talk              13.219    240    24.240      1.586     25.826   30.0
+qr                96.668    240    24.240     11.600     35.840   27.9
+checkin           11.506    240    24.240      1.381     25.621   30.0
+sulk              11.386    240    24.240      1.366     25.606   30.0
+sleep             25.500    240    24.240      3.060     27.300   30.0
+settings           2.350    240    24.240      0.282     24.522   30.0
+home_blink         6.648    130    13.160      0.798     13.958   30.0
+home_nochange      0.007      0     0.000      0.001      0.001   30.0
+```
+
+Two things to read from it: the SPI push of a full frame costs more than any screen's drawing, so the dirty-row clipping (`home_blink` pushes 130 rows, an idle Home pushes none) is what keeps the badge responsive; and QR is the one expensive screen because it re-encodes the code on every redraw.
