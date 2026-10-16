@@ -35,3 +35,18 @@ ESP32-2424S012C, sold as the DIYMORE ESP32-C3 1.28 inch round touch display with
 | BOOT button | 9 | `BOOT_PIN` in `main.cpp` |
 
 Other build flags in `platformio.ini`: `CZ_VERSION` (the running version string, "1.1.0"), `CZ_DEFAULT_BASE` (the server, `https://connect.prmpt.city`), `CZ_RGB_ORDER` and `CZ_ROTATION` (panel orientation, see the checklist), `CZ_LIGHT_SLEEP_FALLBACK` (commented out), and `CZ_WIFI` (defaults to 1 in `main.cpp`; 0 builds a radio-free badge).
+
+## Build and flash
+
+```
+cd firmware
+pio run -e citizen               # compile; prints RAM and Flash usage
+pio run -e citizen -t upload     # flash over USB-C
+pio device monitor               # serial console at 115200
+```
+
+Platform `espressif32@6.12.0`, one library dependency, `lovyan03/LovyanGFX@1.2.7`. `build_src_filter` compiles every `../core/*.c` except `libc_shim.c` (the wasm-only libc stand-in, which would clash with newlib).
+
+Web flasher: open `/flash/` on the deployed site (or `http://localhost:3000/flash/` from `pnpm dev` in `web/`) in Chrome or Edge, plug the badge in over USB-C and press Connect. It is ESP Web Tools driven by `web/public/flash/manifest.json`, which writes `bootloader.bin` at 0x0, `partitions.bin` at 0x8000, `boot_app0.bin` at 0xE000 and `firmware.bin` at 0x10000, with a full erase on a new install. `web/scripts/firmware-publish.ts` copies a built image into `web/public/firmware/` for OTA and the flasher.
+
+If the badge is not detected, hold BOOT while plugging in USB to enter the ROM download mode (GPIO 9 is a strapping pin), then release.
