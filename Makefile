@@ -33,6 +33,13 @@ soak: tests/soak_core
 tests/soak_core: $(SRCS) $(HDRS) tests/soak_core.c
 	$(CC) $(OPTFLAGS) -Icore -o $@ $(SRCS) tests/soak_core.c
 
+# launch-film screen sequences, rendered by the core itself (PRD 6.2)
+frames: video/render_frames
+	./video/render_frames
+
+video/render_frames: $(SRCS) $(HDRS) video/render_frames.c
+	$(CC) $(CFLAGS) -Icore -o $@ $(SRCS) video/render_frames.c
+
 wasm: sim/core.wasm
 
 sim/core.wasm: $(SRCS) $(HDRS)
@@ -41,4 +48,4 @@ sim/core.wasm: $(SRCS) $(HDRS)
 	  -Wl,--no-entry $(EXPORTS) -o $@ $(SRCS)
 
 clean:
-	rm -rf tests/test_core tests/bench_core tests/soak_core tests/out sim/core.wasm
+	rm -rf tests/test_core tests/bench_core tests/soak_core tests/out sim/core.wasm video/render_frames video/frames
