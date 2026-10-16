@@ -139,3 +139,40 @@ Host sleep decides what the simulated host does when the core reports `cz_wants_
 
 At 1x the screen goes black while asleep, like the real backlight. At higher speeds the sleep and wake cycle would
 strobe, so the dimmed Sleep frame is kept visible at 10% instead.
+
+## Content
+
+What the web app and the organiser would provision onto a badge:
+
+- Creature (Tapir, Hornbill, Tiger) and Brightness (100, 40, 10) apply as soon as you change them.
+- Name (up to 10 characters), Prompt and QR url apply when you press Apply content. Strings go through the core's
+  256-byte scratch buffer, so anything beyond 255 bytes is cut.
+- Send now delivers the Message box straight to the core (`cz_message`), which shows the Talk screen.
+- Check in (KL) calls `cz_checkin("KL")`, which shows the Check-in screen.
+- Save writes the core's save blob to localStorage under `citizen-save`. Nothing in the simulator reads it back;
+  it is there to inspect.
+- Reset starts a fresh pet: new seed, no save blob, version back to 1.1.0, telemetry cleared, one boot sync.
+- Wake from deep sleep saves, then re-inits from that blob with Slept seconds, the same path the firmware takes
+  after a deep sleep. Useful to see what 3600 s or a whole night away does to hunger and hearts.
+
+## Clock
+
+The core advances its own wall clock from `cz_tick`; the host only sets it. Time of day calls `cz_set_clock` with
+the minute of the day. Timezone (UTC-12 to UTC+14, default UTC+8) calls `cz_set_timezone`. "Use my computer's
+clock" re-sets the badge clock from `Date` every simulated minute; editing Time of day switches it off again.
+Scenarios set the clock themselves (09:00, 10:00, 20:00). The day and night skyline follows this clock, which the
+selftest checks by comparing a pixel at noon and at 03:00.
+
+## Host requests
+
+The core asks the host for things through `cz_host_request()`, which the simulator polls every tick. The request
+name appears in the status line:
+
+- PORTAL: `portal would start (simulated)`. The firmware would open the WiFi captive portal.
+- CHECK_UPDATE: after 2 simulated seconds the simulator answers `cz_set_update("1.1.1")`, so Settings shows an
+  update available.
+- INSTALL_UPDATE: `would reboot into 1.1.1`. The running version becomes 1.1.1 and the pending update clears.
+- FACTORY_RESET: only named in the status line.
+
+The running version (1.1.0) and the WiFi state (`PromptKL`, connected or off) are fed to the core on boot, after
+every re-init and whenever the WiFi toggle changes, the way the firmware does after `cz_init`.
