@@ -468,6 +468,7 @@ static void run_command(char *line) {
   else if (!strcmp(line, "prompt")) { prefs.putString("prompt", arg); cz_set_prompt(arg); }
   else if (!strcmp(line, "url")) { prefs.putString("base", arg); set_qr(); }
   else if (!strcmp(line, "slug")) { prefs.putString("slug", arg); set_qr(); }
+  else if (!strcmp(line, "token")) { prefs.putString("token", arg); }  // device key from /admin/badges/<slug>, sent as X-Badge-Key
   else if (!strcmp(line, "msg")) cz_message(arg);
   else if (!strcmp(line, "checkin")) cz_checkin(*arg ? arg : "KL");
   else if (!strcmp(line, "wifi")) {
@@ -501,7 +502,7 @@ static void run_command(char *line) {
     rtc_last_upd[0] = rtc_last_city[0] = 0;
 #endif
     Serial.println("cleared, restarting"); delay(100); ESP.restart(); }
-  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | msg ... | checkin [CITY] | brightness 100|40|10 | time HH:MM | tz N | version | update | autoupdate 0|1 | stats | reset"); return; }
+  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | token KEY | msg ... | checkin [CITY] | brightness 100|40|10 | time HH:MM | tz N | version | update | autoupdate 0|1 | stats | reset"); return; }
   Serial.println("ok");
 }
 
