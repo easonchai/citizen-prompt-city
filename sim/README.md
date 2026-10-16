@@ -265,3 +265,51 @@ It is for looking only: touches on the model never reach the core. Use the gestu
 The choice is remembered in localStorage (`citizen-view`) and `?view=3d` forces it. `badge3d.js` and three.js
 0.160.0 (from cdnjs, with OrbitControls from jsDelivr) load on first use, so the 2D simulator never depends on
 the CDN. It needs WebGL; without it the error line shows `Error creating WebGL context` and the view stays 2D.
+
+## Selftest
+
+![Selftest finished: Talk screen showing the queued web message, status paused, Nerd panel open](../docs/sim/sim-selftest.png)
+
+*`?selftest` after its run: the badge is left awake on the Talk screen with the delivered `hello from web` message, the Nerd panel open and the SELFTEST JSON printed below it.*
+
+http://localhost:8791/?selftest drives the acceptance checks in simulated time once the page loads and prints a
+`SELFTEST {...}` line to the console and to a `<pre>` under the panels. In order it records:
+
+- `boot`: the screen after 20 s (Hatch finishes and Home appears), and `full_frame`: rows, push and core ms of
+  the last full-frame draw.
+- `tap`, `swipe`, `hold`, `tap_on_qr`: the screen after each gesture button.
+- `double` and `settings_open`: double tap lands on Settings; `swipe_brightness`: a swipe in Settings changes the
+  brightness value; `settings_exit`: hold leaves Settings.
+- `day_night_px20`: one skyline pixel at noon and at 03:00 differs.
+- `home_frames`: four consecutive Home animation steps all differ, and 250 ms samples are distinct.
+- `forgotten_72h`: the Forgotten scenario run to the end, with fps, frame and push ms, average mA, mAh, battery
+  hours and weeks, temperature, syncs, power state and how many wall-clock ms the run took.
+- `event_day_1h`: one hour of Event day, plus `syncs_per_h` and `wakes_per_h`.
+- `csv`: the export header and row count of that recording.
+- `queued_msg`: a message queued from the web arrives on the next periodic sync, with the seconds it waited.
+- `import`: 50 synthetic F3 lines built from the recording go through the importer and produce a factor.
+
+Then it leaves the badge awake and paused with the Nerd panel open, and prints a second line, `SELFTEST_400`:
+the page is loaded again in a hidden 400 px wide iframe and `ok` means `document.body.scrollWidth <= 400` and no
+gesture button label is clipped (`gesture_rows` says how many rows the four buttons wrapped to). It uses an
+iframe because desktop Chrome clamps `--window-size` to 500 px wide.
+
+`scripts/check.sh` runs the same page headlessly and greps both lines:
+
+```
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu \
+  --virtual-time-budget=12000 --dump-dom "http://localhost:8791/?selftest" | grep -o 'SELFTEST[^<]*'
+```
+
+## Screenshots
+
+The images in `docs/sim/` were taken with headless Chrome against the server on port 8791, for example:
+
+```
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu \
+  --window-size=1400,1000 --virtual-time-budget=6000 --screenshot=/full/path/out.png "http://localhost:8791/?scenario=desk"
+```
+
+The 3D view needs WebGL, which `--disable-gpu` removes in headless mode. Use
+`--use-angle=swiftshader --enable-unsafe-swiftshader` instead of `--disable-gpu` for `?view=3d`. The selftest
+shot used `--window-size=1400,1800 --virtual-time-budget=12000` so the whole run completes before capture.
