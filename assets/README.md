@@ -75,7 +75,7 @@ Listing photos in `ref/ws-*.jpg`: the bare board (`ws-bare-1` to `ws-bare-3`), t
 
 ## Proposal
 
-[Citizen-proposal.pdf](proposal/Citizen-proposal.pdf), nine pages: the pitch to PROMPT:KL for a pixel pet badge as the speaker gift, with the three creatures, the screens, the board and the plan. `proposal/index.html` is the source it was printed from.
+[proposal/index.html](proposal/index.html), nine pages (open it in a browser and print to PDF): the pitch to PROMPT:KL for a pixel pet badge as the speaker gift, with the three creatures, the screens, the board and the plan. `proposal/index.html` is the source it was printed from.
 
 ## Film
 
