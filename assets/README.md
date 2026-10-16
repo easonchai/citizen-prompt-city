@@ -34,3 +34,15 @@ Poses, one file per creature and pose (`sprites/<creature>-<POSE>.png`): IDLE, B
 | ![Tiger idle](sprites/tiger-IDLE.png) | ![Tiger blink](sprites/tiger-BLINK.png) | ![Tiger eat](sprites/tiger-EAT.png) | ![Tiger play](sprites/tiger-PLAY.png) | ![Tiger sleep](sprites/tiger-SLEEP.png) | ![Tiger sulk](sprites/tiger-SULK.png) | ![Tiger talk](sprites/tiger-TALK.png) | ![Tiger cheer](sprites/tiger-CHEER.png) |
 
 `sprites/_preview.png` is a 192x192 contact sheet of the three idle poses, `sprites/palette.png` is the 64x1 index palette the sprites are quantised to.
+
+## Screens
+
+Every screen is 240x240, the badge's native resolution. `screens/<name>.png` is 1x, `screens/<name>-4x.png` is a 960x960 nearest-neighbour upscale for print. Shown here at 4x.
+
+| ![Tapir hatch](screens/tapir-hatch-4x.png) Hatch: the prompt types out on first boot | ![Tapir home](screens/tapir-home-4x.png) Home: Tenuk idle, hearts and the three gestures | ![Tapir qr](screens/tapir-qr-4x.png) QR: hold one second, scan to chat |
+|---|---|---|
+| ![Tapir talk](screens/tapir-talk-4x.png) Talk: a reply from the chat page | ![Tapir sleep](screens/tapir-sleep-4x.png) Sleep: 30 s without a touch | ![Hornbill home](screens/hornbill-home-4x.png) Home: Kenyalang |
+| ![Hornbill eat](screens/hornbill-eat-4x.png) Feed: tap, nasi lemak, a heart | ![Hornbill sulk](screens/hornbill-sulk-4x.png) Sulk: six hours without food | ![Tiger home](screens/tiger-home-4x.png) Home: Harimau |
+| ![Tiger play](screens/tiger-play-4x.png) Play: swipe, the hop and the ball | ![Tiger cheer](screens/tiger-cheer-4x.png) Cheer: checked in at the venue | |
+
+The design source of truth for these is `../SCREEN_DESIGN_SOURCE.html`; the running core renders the same screens into `tests/out/*.ppm` under `make test`.
