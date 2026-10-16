@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Citizen Thank You</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@800&family=Instrument+Sans:wght@400;600&family=Silkscreen&display=block" rel="stylesheet">
+<style>
+  :root { --navy: #141c3a; --deep: #0d1226; --cream: #f6f1e4; --gold: #f0b840; --coral: #f06a5a; --teal: #2bb8a8; --muted: #9aa0bd; }
+  @page { size: 105mm 148mm; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--navy); }
+  body { font: 400 10.5pt/1.4 "Instrument Sans", sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .card { width: 105mm; height: 148mm; position: relative; overflow: hidden; page-break-after: always; padding: 11mm 9mm; display: flex; flex-direction: column; }
+  .card:last-child { page-break-after: auto; }
+  .front { background: var(--navy); color: var(--cream); }
+  .back { background: var(--cream); color: var(--navy); align-items: center; text-align: center; }
+  .tag { font: 8pt "Silkscreen", monospace; letter-spacing: .06em; color: var(--gold); }
+  h1 { font: 800 30pt/1.02 "Plus Jakarta Sans", sans-serif; margin: auto 0 6mm; letter-spacing: -.01em; }
+  h1 span { color: var(--gold); display: block; }
+  .msg { font-size: 12pt; margin-bottom: 14mm; }
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 8mm; background: var(--gold); color: var(--navy); font: 8pt "Silkscreen", monospace; display: flex; align-items: center; justify-content: space-between; padding: 0 9mm; }
+  .sprite { width: 30mm; height: 30mm; image-rendering: pixelated; background: var(--navy); border-radius: 50%; }
+  .name { font: 14pt "Silkscreen", monospace; color: var(--coral); margin: 2mm 0 3mm; }
+  .bubble { position: relative; background: #fff; border: 2px solid var(--navy); border-radius: 3mm; padding: 3mm 4mm; font-size: 10pt; line-height: 1.35; max-width: 82mm; }
+  .bubble::before { content: ""; position: absolute; top: -2.6mm; left: 50%; transform: translateX(-50%) rotate(45deg); width: 4mm; height: 4mm; background: #fff; border-left: 2px solid var(--navy); border-top: 2px solid var(--navy); }
+  .qr { width: 38mm; height: 38mm; margin: 5mm 0 1.5mm; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .url { font-size: 7.5pt; color: #5a607a; word-break: break-all; }
+  .scan { font: 8pt "Silkscreen", monospace; margin-top: 1mm; }
+</style>
+</head>
+<body>
+<section class="card front">
+  <div class="tag">PROMPT:KL · 31 OCT 2026</div>
+  <h1>Thank you, <span>{{speaker}}</span></h1>
+  <p class="msg">Your talk helped make PROMPT:KL what it was.<br>{{name}} hatched from it and lives on your badge now.</p>
+  <div class="band"><span>CITIZEN</span><span>KL EDITION</span></div>
+</section>
+<section class="card back">
+  <img class="sprite" src="{{sprite}}" alt="">
+  <div class="name">{{NAME}}</div>
+  <div class="bubble">{{prompt}}</div>
+  <div class="qr">{{qr}}</div>
+  <div class="scan">SCAN TO CHAT</div>
+  <div class="url">{{url}}</div>
+</section>
+</body>
+</html>

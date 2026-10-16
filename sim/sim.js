@@ -1,8 +1,9 @@
 import { frameCost, currentMa, syncMas, tempC, batteryHours } from './model.js';
 
-const SCREENS = ['HATCH','HOME','FEED','PLAY','TALK','QR','CHECKIN','SULK','SLEEP'];
+const SCREENS = ['HATCH','HOME','FEED','PLAY','TALK','QR','CHECKIN','SULK','SLEEP','SETTINGS'];
+const REQS = ['NONE','PORTAL','CHECK_UPDATE','INSTALL_UPDATE','FACTORY_RESET'];
 const POSES = ['IDLE','BLINK','EAT','PLAY','SLEEP','SULK','TALK','CHEER'];
-const W = 240, H = 240, NCOL = 11, SAVE_KEY = 'citizen-save';
+const W = 240, H = 240, NCOL = 15 /* CZ_C_COUNT */, SAVE_KEY = 'citizen-save';
 const STEP_MS = 1000 / 30; // the firmware loop runs at most 30 fps, so the core is ticked at that rate in sim time
 const $ = id => document.getElementById(id);
 const fail = e => { $('err').textContent = String(e); console.error(e); };
@@ -32,6 +33,7 @@ const sim = {
   wifi: false, nextSync: Infinity, syncs: 0, wakes: 0, pending: { msg: null, checkin: null },
   rate: 0, nextTap: Infinity, inGesture: false,
   scenario: null, end: Infinity,
+  version: '1.1.0', updateAt: Infinity, nextClock: Infinity, note: '',
 };
 const now = () => sim.ms >>> 0;
 const seed = () => (Math.random() * 2 ** 32) >>> 0;
@@ -46,7 +48,18 @@ function applyContent() {
   withStr(cz.cz_set_name, $('name').value);
   withStr(cz.cz_set_prompt, $('prompt').value);
   withStr(cz.cz_set_qr_url, $('qr').value);
+  applyHost();
 }
+// What the real firmware tells the core after every init: running version and WiFi state (cz_set_wifi/cz_set_version).
+function applyHost() {
+  withStr(cz.cz_set_version, sim.version);
+  withStr(p => cz.cz_set_wifi(p, sim.wifi ? 2 : 0), 'PromptKL');
+}
+// ---- badge clock: the core advances it from cz_tick; the host only sets it
+const clockMin = () => { const [h, m] = $('clock').value.split(':').map(Number); return (h * 60 + m) || 0; };
+function setClock(min) { $('clock').value = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`; cz.cz_set_clock(min); }
+function syncComputerClock() { const d = new Date(); setClock(d.getHours() * 60 + d.getMinutes()); }
+function updateClockMode() { sim.nextClock = $('useclock').checked ? sim.ms : Infinity; }
 const b64 = u8 => btoa(String.fromCharCode(...u8));
 function saveBlob() {
   const n = cz.cz_save(cz.cz_scratch(), 64);
@@ -102,6 +115,13 @@ function coreFrame() {
     bucket.frames++; bucket.core += f.core; bucket.push += f.push; bucket.frame += f.frame; bucket.rows += rows;
     needPresent = true;
   }
+  for (let q; (q = cz.cz_host_request()); ) {
+    sim.note = REQS[q] ?? String(q);
+    if (q === 1) sim.note += ': portal would start (simulated)';
+    else if (q === 2) sim.updateAt = sim.ms + 2000;
+    else if (q === 3) { sim.note += ': would reboot into 1.1.1'; sim.version = '1.1.1'; withStr(cz.cz_set_version, sim.version); withStr(cz.cz_set_update, ''); }
+  }
+  if (sim.ms >= sim.updateAt) { sim.updateAt = Infinity; withStr(cz.cz_set_update, '1.1.1'); }
   if (sim.power === 'awake' && cz.cz_wants_sleep()) {
     const mode = $('sleepmode').value;
     if (mode === 'deep') { sim.blob = saveBlob(); sim.sleptMs = 0; sim.power = 'deep'; sim.nextSync = Infinity; needPresent = true; }
@@ -112,7 +132,7 @@ function coreFrame() {
 // ---- event-driven stepping in simulated time
 function advanceTo(target) {
   while (sim.ms < target) {
-    const end = Math.max(sim.ms, Math.min(target, bucket.end, sim.ms + STEP_MS, sim.nextTap, sim.nextSync));
+    const end = Math.max(sim.ms, Math.min(target, bucket.end, sim.ms + STEP_MS, sim.nextTap, sim.nextSync, sim.nextClock, sim.updateAt));
     bucket.mAs += currentMa(hw, sim.power, sim.wifi, cz.cz_brightness()) * (end - sim.ms) / 1000;
     if (sim.power === 'deep') sim.sleptMs += end - sim.ms;
     sim.ms = end;
@@ -121,6 +141,7 @@ function advanceTo(target) {
       if (!sim.inGesture) { if (sim.power !== 'awake') wake(); gesture('tap'); }
       scheduleTap();
     }
+    if (sim.ms >= sim.nextClock) { syncComputerClock(); sim.nextClock += 60000; }
     while (sim.ms >= sim.nextSync) { sync(); sim.nextSync += Math.max(1, hw.sync_interval_s) * 1000; }
     if (sim.ms >= bucket.end) closeBucket();
   }
@@ -155,7 +176,7 @@ function connect() {
   sync();
 }
 function setWifi(on) {
-  sim.wifi = on; $('wifi').checked = on;
+  sim.wifi = on; $('wifi').checked = on; applyHost();
   connect();
 }
 function sync() {
@@ -184,12 +205,15 @@ async function poll() {
 
 // ---- scenarios (S11)
 const SCENARIOS = {
-  desk: { label: 'Desk day', wifi: false, rate: 10, hours: 8, usb: true },
-  event: { label: 'Event day', wifi: true, rate: 60, hours: 10 }, // syncs follow F6: one per wake plus every 60 s awake
-  forgotten: { label: 'Forgotten', wifi: false, rate: 0, hours: 72 },
+  desk: { label: 'Desk day', clock: '09:00', wifi: false, rate: 10, hours: 8, usb: true },
+  event: { label: 'Event day', clock: '10:00', wifi: true, rate: 60, hours: 10 }, // syncs follow F6: one per wake plus every 60 s awake
+  forgotten: { label: 'Forgotten', clock: '20:00', wifi: false, rate: 0, hours: 72 },
 };
 function reset() {
+  sim.version = '1.1.0'; sim.updateAt = Infinity; sim.note = '';
   init(null, 0); applyContent();
+  if ($('useclock').checked) syncComputerClock(); else cz.cz_set_clock(clockMin());
+  updateClockMode();
   sim.power = 'awake'; sim.scenario = null; sim.end = Infinity; sim.pending = { msg: null, checkin: null };
   resetTelemetry(); needPresent = true;
   connect(); // F6 boot sync
@@ -198,6 +222,7 @@ function runScenario(key) {
   const s = SCENARIOS[key];
   hw.sync_interval_s = 60; $('sync').value = 60; // F6
   sim.wifi = $('wifi').checked = s.wifi;
+  $('clock').value = s.clock; $('useclock').checked = false;
   reset();
   $('sleepmode').value = 'deep';
   sim.rate = s.rate; $('rate').value = s.rate; scheduleTap();
@@ -284,6 +309,9 @@ $('wake').onclick = () => {
   const blob = doSave(); // saving first stands in for what the firmware did before sleeping
   if (blob) { init(blob, Math.max(0, +$('slept').value | 0)); applyContent(); sim.power = 'awake'; sim.wakes++; needPresent = true; connect(); }
 };
+$('clock').onchange = () => { $('useclock').checked = false; updateClockMode(); cz.cz_set_clock(clockMin()); };
+$('useclock').onchange = () => { updateClockMode(); if ($('useclock').checked) syncComputerClock(); };
+$('tz').onchange = () => cz.cz_set_timezone(+$('tz').value);
 $('wifi').onchange = e => setWifi(e.target.checked);
 $('sync').onchange = e => { hw.sync_interval_s = Math.max(1, +e.target.value || 60); if (sim.wifi) setWifi(true); };
 $('queue').onclick = () => { sim.pending.msg = $('webmsg').value.slice(0, 64); };
@@ -367,11 +395,12 @@ function ui(t) {
   $('r-pose').textContent = POSES[cz.cz_pose()] ?? cz.cz_pose();
   $('r-hunger').textContent = mmss(cz.cz_hunger_ms());
   $('r-power').textContent = sim.power + (sim.wifi ? ', WiFi' : '') + (sim.scenario?.usb ? ', USB powered' : '');
+  const bc = cz.cz_clock(); $('r-clock').textContent = bc < 0 ? 'unknown' : `${String(Math.floor(bc / 60)).padStart(2, '0')}:${String(bc % 60).padStart(2, '0')}`;
   $('r-bright').textContent = cz.cz_brightness() + '%';
   const sc = sim.scenario;
   $('status').textContent = `${sim.paused ? 'paused' : (sim.fingerDown ? 1 : sim.speed) + 'x'}` +
     (sc ? ` · ${sc.label} ${hms(sim.ms - (sim.end - sc.hours * 3600e3))} / ${sc.hours}h` : '') +
-    (recording ? ` · recording ${record.length} s` : '') + (sim.pending.msg != null ? ' · message queued' : '');
+    (recording ? ` · recording ${record.length} s` : '') + (sim.pending.msg != null ? ' · message queued' : '') + (sim.note ? ` · request ${sim.note}` : '');
   if (t - uiAt < 200 || $('nerdpanel').hidden) return;
   uiAt = t;
   $('tele').innerHTML = teleRows().map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
@@ -411,7 +440,17 @@ function selftest() {
   gesture('swipe'); r.swipe = scr(); advanceTo(sim.ms + 3500);
   gesture('hold'); r.hold = scr();
   gesture('tap'); r.tap_on_qr = scr(); advanceTo(sim.ms + 3500);
-  const b0 = cz.cz_brightness(); gesture('double'); r.double = `${b0}->${cz.cz_brightness()}`;
+  gesture('double'); advanceTo(sim.ms + 500); r.double = scr(); r.settings_open = cz.cz_screen() === 9;
+  const b0 = cz.cz_brightness(); gesture('swipe'); advanceTo(sim.ms + 500); r.swipe_brightness = `${b0}->${cz.cz_brightness()}`;
+  gesture('hold'); advanceTo(sim.ms + 500); r.settings_exit = scr();
+  const fbh = () => { const f = new Uint8Array(cz.memory.buffer, cz.cz_framebuffer(), W * H); let h = 0; for (let i = 0; i < f.length; i++) h = (Math.imul(h, 31) + f[i]) | 0; return h; };
+  const px = () => new Uint8Array(cz.memory.buffer, cz.cz_framebuffer(), W * H)[20 * W + 20];
+  cz.cz_set_clock(720); advanceTo(sim.ms + 500); const noon = px(); cz.cz_set_clock(180); advanceTo(sim.ms + 500); const night = px();
+  r.day_night_px20 = { noon, night, differ: noon !== night };
+  // Home breath steps every 600 ms (PRD 2.6), so 250 ms samples repeat; assert 4 consecutive animation steps by waiting for each change.
+  const hs = [fbh()]; for (let i = 0; i < 4; i++) { for (let k = 0; k < 60 && fbh() === hs[i]; k++) advanceTo(sim.ms + 50); hs.push(fbh()); }
+  const raw = []; for (let i = 0; i < 4; i++) { advanceTo(sim.ms + 250); raw.push(fbh()); }
+  r.home_frames = { screen: scr(), steps_differ: hs.every((h, i) => !i || h !== hs[i - 1]), sampled_250ms: raw, sampled_250ms_all_distinct: new Set(raw).size === 4 };
   const summary = () => ({ fps: +lastFrame.fps.toFixed(1), frame_ms: +lastFrame.frame.toFixed(2), push_ms: +lastFrame.push.toFixed(2),
     rows: lastFrame.rows, avg_ma_last_hour: +last.avg_ma.toFixed(3), mah: +last.mah.toFixed(2), battery_h: +last.battery_h.toFixed(1),
     temp_c: +last.temp_c.toFixed(1), syncs: sim.syncs, power: sim.power });

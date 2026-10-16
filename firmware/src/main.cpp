@@ -19,6 +19,14 @@ extern "C" {
 #include <HTTPClient.h>
 #include <DNSServer.h>
 #include <WebServer.h>
+#include <WiFiClientSecure.h>
+#include <HTTPUpdate.h>
+#endif
+#ifndef CZ_VERSION
+#define CZ_VERSION "0.0.0"
+#endif
+#ifndef CZ_DEFAULT_BASE
+#error "build with -DCZ_DEFAULT_BASE (see platformio.ini)"
 #endif
 
 // F10: colour order and orientation. If red/blue are swapped build with -DCZ_RGB_ORDER=1;
@@ -198,9 +206,23 @@ static void poll_serial();
 
 // F6: server base + slug. Default slug is the creature's default name, lowercase (mirrors DEFAULT_NAME in core/citizen.c).
 static const char *const DEFAULT_SLUG[CZ_CREATURES] = {"tenuk", "kenyalang", "harimau"};
-static String pref_base() { return prefs.getString("base", "https://prmpt.city"); }
+static String pref_base() { return prefs.getString("base", CZ_DEFAULT_BASE); }
 static String pref_slug() { return prefs.getString("slug", DEFAULT_SLUG[cz_creature()]); }
 static void set_qr() { cz_set_qr_url((pref_base() + "/c/" + pref_slug()).c_str()); }
+
+// --- F8 clock: system time is UTC epoch once SNTP has synced (0-based on cold boot until then). ---
+static bool time_valid() { return time(nullptr) > 1700000000; }
+static int local_minute(long utc_minute) { return (int)((((utc_minute + cz_timezone() * 60L) % 1440) + 1440) % 1440); }
+static void clock_from_system() {
+  if (time_valid()) cz_set_clock(local_minute(time(nullptr) / 60));
+}
+static int known_tz = 0;
+static void set_tz(int h) {
+  cz_set_timezone(h);
+  known_tz = cz_timezone();
+  prefs.putInt("tz", known_tz);
+  clock_from_system();
+}
 
 // --- WiFi + remote state ---
 #if CZ_WIFI
@@ -248,6 +270,75 @@ static const char *wifi_state() {
 }
 static int wifi_rssi() { return WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0; }
 
+// F8: tells the core when the WiFi state changes; on connect starts SNTP.
+static void wifi_watch() {
+  static int last = -1;
+  const char *s = wifi_state();
+  int st = s[0] == 'o' ? (s[1] == 'k' ? CZ_WIFI_OK : CZ_WIFI_OFF) : s[0] == 'c' ? CZ_WIFI_CONNECTING : CZ_WIFI_FAIL;
+  if (st == last) return;
+  last = st;
+  cz_set_wifi(prefs.getString("ssid", "").c_str(), st);
+  if (st == CZ_WIFI_OK) configTime(cz_timezone() * 3600L, 0, "pool.ntp.org");
+}
+
+// 3-part numeric semver compare: >0 if a is newer than b. Missing parts count as 0; suffixes are ignored.
+static int semver_cmp(const char *a, const char *b) {
+  int x[3] = {0, 0, 0}, y[3] = {0, 0, 0};
+  sscanf(a, "%d.%d.%d", &x[0], &x[1], &x[2]);
+  sscanf(b, "%d.%d.%d", &y[0], &y[1], &y[2]);
+  for (int i = 0; i < 3; i++)
+    if (x[i] != y[i]) return x[i] > y[i] ? 1 : -1;
+  return 0;
+}
+
+// F11: GET <base>/api/firmware/latest -> {"version","url","sha256"}. Tells the core whether a newer build exists.
+static String update_url;
+static bool check_update() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  HTTPClient http;
+  http.setTimeout(3000);
+  bool ok = false;
+  if (http.begin(pref_base() + "/api/firmware/latest")) {
+    if (http.GET() == 200) {
+      String body = http.getString();
+      char ver[16], url[200];
+      if (json_str(body, "version", ver, sizeof ver) && json_str(body, "url", url, sizeof url)) {
+        bool newer = semver_cmp(ver, CZ_VERSION) > 0;  // never offer an older or equal build
+        update_url = newer ? url : "";
+        cz_set_update(newer ? ver : "");
+        ok = true;
+      }
+    }
+    http.end();
+  }
+  return ok;
+}
+
+// F11 OTA into the other app slot, then reboot. Prefs live in nvs, untouched by OTA.
+// shortcut: setInsecure() skips TLS cert checks (no CA bundle in V1); pin a CA bundle before wider release.
+// shortcut: latest.json's sha256 is not checked (HTTPUpdate streams straight into Update with no hash hook);
+// the ESP-IDF image header + appended SHA-256 are still validated by Update before the slot is switched.
+static void install_update() {
+  if (!update_url.length()) {
+    if (!check_update()) { cz_message("UPDATE FAILED"); return; }
+    if (!update_url.length()) return;  // up to date; Settings already says so
+  }
+  save_now();
+  cz_message("UPDATING...");
+  cz_tick(millis());
+  int y0, y1;
+  if (cz_dirty_rows(&y0, &y1)) push_rows(y0, y1);
+  WiFiClientSecure client;
+  client.setInsecure();
+  httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  httpUpdate.rebootOnUpdate(true);
+  t_httpUpdate_return r = httpUpdate.update(client, update_url, CZ_VERSION);
+  if (r != HTTP_UPDATE_OK) {
+    Serial.printf("update failed: %s\n", httpUpdate.getLastErrorString().c_str());
+    cz_message("UPDATE FAILED");
+  }
+}
+
 // F6: poll once right after connecting (or after the 8 s connect timeout), then every 60 s while awake.
 static void wifi_poll() {
   if (!wifi_started) return;
@@ -281,8 +372,20 @@ static void wifi_poll() {
         prefs.putString("name", buf);
         cz_set_name(buf);
       }
+      // "now": ISO 8601 UTC, e.g. 2026-10-31T09:41:00.000Z. Fallback clock until SNTP syncs.
+      if (!time_valid() && json_str(body, "now", buf, sizeof buf) && strlen(buf) >= 16 && buf[10] == 'T' &&
+          isdigit(buf[11]) && isdigit(buf[12]) && buf[13] == ':' && isdigit(buf[14]) && isdigit(buf[15]))
+        cz_set_clock(local_minute(((buf[11] - '0') * 10 + buf[12] - '0') * 60 + (buf[14] - '0') * 10 + buf[15] - '0'));
     }
     http.end();
+  }
+  clock_from_system();  // re-anchor to SNTP once a minute
+  // F11: after the first state poll of each wake (deep sleep reboots, resetting these), then at most hourly.
+  static bool update_checked = false;
+  static uint32_t update_check_ms = 0;
+  if ((!update_checked || millis() - update_check_ms >= 3600000UL) && check_update()) {
+    update_checked = true;
+    update_check_ms = millis();
   }
   if (!first && tl_line[0] && http.begin(api + "/telemetry")) {  // F6: last F3 line, once a minute while awake
     http.addHeader("Content-Type", "application/json");
@@ -308,7 +411,7 @@ static void run_portal() {
              "<form method=post action=/save style='font:18px sans-serif;max-width:320px;margin:auto'>"
              "<h2>Citizen WiFi</h2><p>WiFi name<br><input name=ssid maxlength=32 required></p>"
              "<p>Password<br><input name=pass type=password maxlength=64></p>"
-             "<p>Server<br><input name=base type=url maxlength=128 placeholder='https://prmpt.city'></p>"
+             "<p>Server<br><input name=base type=url maxlength=128 placeholder='" CZ_DEFAULT_BASE "'></p>"
              "<p>Slug<br><input name=slug maxlength=32 placeholder='tenuk'></p>"
              "<button>Save</button></form>");
   });
@@ -376,12 +479,26 @@ static void run_command(char *line) {
   }
   else if (!strcmp(line, "brightness")) { cz_set_brightness(atoi(arg)); save_now(); }  // core keeps it in the save blob
   else if (!strcmp(line, "stats")) { Serial.println(telemetry_line()); return; }
+  else if (!strcmp(line, "time")) {
+    int h, m;
+    if (sscanf(arg, "%d:%d", &h, &m) != 2 || h < 0 || h > 23 || m < 0 || m > 59) { Serial.println("time HH:MM"); return; }
+    cz_set_clock(h * 60 + m); save_now();
+  }
+  else if (!strcmp(line, "tz")) {
+    int h = atoi(arg);
+    if (!*arg || h < -12 || h > 14) { Serial.println("tz -12..14"); return; }
+    set_tz(h); save_now();
+  }
+  else if (!strcmp(line, "version")) { Serial.println(CZ_VERSION); return; }
+#if CZ_WIFI
+  else if (!strcmp(line, "update")) { update_url = ""; install_update(); }
+#endif
   else if (!strcmp(line, "reset")) { prefs.clear(); rtc_sleep_stamp_s = 0;
 #if CZ_WIFI
     rtc_last_upd[0] = rtc_last_city[0] = 0;
 #endif
     Serial.println("cleared, restarting"); delay(100); ESP.restart(); }
-  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | msg ... | checkin [CITY] | brightness 100|40|10 | stats | reset"); return; }
+  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | msg ... | checkin [CITY] | brightness 100|40|10 | time HH:MM | tz N | version | update | stats | reset"); return; }
   Serial.println("ok");
 }
 
@@ -396,6 +513,8 @@ static void poll_serial() {
 
 // Applies the core's brightness (F8) to the backlight PWM when it changes. -1 forces a re-apply.
 static int applied_brightness = -1;
+// Settings changes the host must persist: load_pet re-applies the 'creature'/'name' prefs on every wake.
+static int known_creature = -1, known_brightness = -1;
 static void apply_brightness() {
   int b = cz_brightness();
   if (b == applied_brightness) return;
@@ -414,6 +533,12 @@ static void load_pet(uint32_t slept) {
   if (prefs.isKey("creature")) cz_set_creature(prefs.getInt("creature", 0));
   if (prefs.isKey("name")) cz_set_name(prefs.getString("name").c_str());
   if (prefs.isKey("prompt")) cz_set_prompt(prefs.getString("prompt").c_str());
+  cz_set_timezone(prefs.getInt("tz", 8));
+  known_tz = cz_timezone();
+  cz_set_version(CZ_VERSION);
+  known_creature = cz_creature();
+  known_brightness = cz_brightness();
+  clock_from_system();  // after deep sleep the RTC kept SNTP time
   set_qr();
   last_hearts = cz_hearts();
   last_save_ms = millis();
@@ -497,8 +622,28 @@ void loop() {
   cz_tick(millis());  // the core renders inside tick
   uint32_t tick_us = micros() - t0;
 #if CZ_WIFI
+  wifi_watch();
   wifi_poll();  // outside frame_ms: an HTTP sync is a radio burst, not frame work
+  switch (cz_host_request()) {  // F8: actions picked in Settings
+    case CZ_REQ_PORTAL: run_portal(); break;  // blocks, reboots on save
+    case CZ_REQ_CHECK_UPDATE: check_update(); break;
+    case CZ_REQ_INSTALL_UPDATE: install_update(); break;
+  }
 #endif
+  if (cz_timezone() != known_tz) set_tz(cz_timezone());  // changed in Settings: persist and re-anchor
+  if (cz_creature() != known_creature) {  // Settings -> Citizen: store creature + the core's name so wake keeps it
+    known_creature = cz_creature();
+    uint8_t blob[CZ_SAVE_SIZE];
+    cz_save(blob, sizeof blob);  // the core has no name getter; the blob holds it NUL-terminated at 16..26
+    prefs.putInt("creature", known_creature);
+    prefs.putString("name", (const char *)blob + 16);
+    set_qr();  // the default slug follows the creature
+    save_now();
+  }
+  if (cz_brightness() != known_brightness) {  // Settings -> Brightness: lives in the save blob, so write it now
+    known_brightness = cz_brightness();
+    save_now();
+  }
   int y0, y1;
   if (cz_dirty_rows(&y0, &y1)) {
     uint32_t p0 = micros();

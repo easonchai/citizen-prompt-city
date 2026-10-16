@@ -41,6 +41,7 @@ dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}dt{color:va
   <section>
     <h2>Gestures</h2>
     <div class="row g"><button data-g="tap">Tap</button><button data-g="swipe">Swipe</button><button data-g="hold">Hold</button><button data-g="double">Double tap</button></div>
+    <div class="legend">Double tap opens Settings. There: tap = next item, swipe right = change it, swipe left = back, hold = exit.</div>
     <h2>Time</h2>
     <div class="row">
       <button id="pause">Pause</button><button id="step">Step 1 s</button><button id="jump">Jump 1 h</button>
@@ -59,6 +60,7 @@ dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}dt{color:va
       <dt>Pose</dt><dd id="r-pose"></dd>
       <dt>Hunger</dt><dd id="r-hunger"></dd>
       <dt>Power</dt><dd id="r-power"></dd>
+      <dt>Badge clock</dt><dd id="r-clock"></dd>
       <dt>Brightness</dt><dd id="r-bright"></dd>
     </dl>
   </section>
@@ -83,6 +85,14 @@ dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}dt{color:va
     <div class="row"><button id="save">Save</button><button id="reset">Reset</button></div>
     <label>Slept seconds <input id="slept" type="number" value="3600" min="0"></label>
     <button id="wake">Wake from deep sleep</button>
+  </section>
+  <section>
+    <h2>Clock</h2>
+    <div class="row">
+      <label>Time of day <input id="clock" type="time" value="09:00"></label>
+      <label>Timezone <select id="tz"><option value="-12">UTC-12</option><option value="-11">UTC-11</option><option value="-10">UTC-10</option><option value="-9">UTC-9</option><option value="-8">UTC-8</option><option value="-7">UTC-7</option><option value="-6">UTC-6</option><option value="-5">UTC-5</option><option value="-4">UTC-4</option><option value="-3">UTC-3</option><option value="-2">UTC-2</option><option value="-1">UTC-1</option><option value="0">UTC+0</option><option value="1">UTC+1</option><option value="2">UTC+2</option><option value="3">UTC+3</option><option value="4">UTC+4</option><option value="5">UTC+5</option><option value="6">UTC+6</option><option value="7">UTC+7</option><option value="8" selected>UTC+8</option><option value="9">UTC+9</option><option value="10">UTC+10</option><option value="11">UTC+11</option><option value="12">UTC+12</option><option value="13">UTC+13</option><option value="14">UTC+14</option></select></label>
+    </div>
+    <label class="inline"><input id="useclock" type="checkbox"> Use my computer's clock (set every simulated minute)</label>
   </section>
   <section>
     <h2>WiFi</h2>

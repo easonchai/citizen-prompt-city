@@ -20,6 +20,10 @@ const uint8_t cz_pal_rgb[CZ_C_COUNT][3] = {
     {0x2a, 0x2a, 0x2e}, /* char  sprite only */
     {0xf4, 0xa3, 0xb5}, /* pink  sprite only */
     {0xff, 0xe3, 0x8a}, /* pale  sprite only */
+    {0x5a, 0xa9, 0xe6}, /* daysky     day sky */
+    {0xcf, 0xe8, 0xff}, /* dayhorizon day horizon band */
+    {0xe0, 0x7a, 0x8a}, /* rose       dawn band, dusk sky */
+    {0xee, 0xf3, 0xff}, /* cloud */
 };
 
 #define RGB565(r, g, b) (uint16_t)((((r) & 0xf8) << 8) | (((g) & 0xfc) << 3) | ((b) >> 3))
@@ -27,6 +31,7 @@ const uint16_t cz_pal565[CZ_C_COUNT] = {
     RGB565(0x00, 0x00, 0x00), RGB565(0x14, 0x1c, 0x3a), RGB565(0x1e, 0x2a, 0x58), RGB565(0x0a, 0x0e, 0x1f),
     RGB565(0xf6, 0xf1, 0xe4), RGB565(0xf0, 0xb8, 0x40), RGB565(0xf0, 0x6a, 0x5a), RGB565(0x2b, 0xb8, 0xa8),
     RGB565(0x2a, 0x2a, 0x2e), RGB565(0xf4, 0xa3, 0xb5), RGB565(0xff, 0xe3, 0x8a),
+    RGB565(0x5a, 0xa9, 0xe6), RGB565(0xcf, 0xe8, 0xff), RGB565(0xe0, 0x7a, 0x8a), RGB565(0xee, 0xf3, 0xff),
 };
 
 void cz_rect(int x, int y, int w, int h, int color) {
@@ -43,13 +48,16 @@ void cz_rect(int x, int y, int w, int h, int color) {
         for (i = x; i < x1; i++) cz_fb[j * CZ_W + i] = (uint8_t)color;
 }
 
-void cz_blit(const uint8_t *spr, int x, int y, int scale) {
-    int sx, sy;
-    for (sy = 0; sy < CZ_SPRITE; sy++)
+void cz_blit(const uint8_t *spr, int x, int y, int scale, int squash) {
+    int sx, sy, oy;
+    for (sy = 0; sy < CZ_SPRITE; sy++) {
+        if (squash && sy == CZ_SPRITE / 2) continue;
+        oy = squash && sy < CZ_SPRITE / 2 ? sy + 1 : sy; /* upper half drops one row onto the skipped one */
         for (sx = 0; sx < CZ_SPRITE; sx++) {
             uint8_t c = spr[sy * CZ_SPRITE + sx];
-            if (c) { cz_stats[CZ_STAT_SPRITE_PIXELS]++; cz_rect(x + sx * scale, y + sy * scale, scale, scale, c); }
+            if (c) { cz_stats[CZ_STAT_SPRITE_PIXELS]++; cz_rect(x + sx * scale, y + oy * scale, scale, scale, c); }
         }
+    }
 }
 
 /* 3x5 font, rows of 3 bits (MSB = left), ported from the JS F table. 0xB7 is the middle dot. */
@@ -110,6 +118,9 @@ static const uint8_t ICONS[CZ_ICONS][8] = {
     {0x3c,0x66,0xdf,0xbf,0xff,0xff,0x7e,0x3c}, /* ball */
     {0x7e,0x81,0x81,0x81,0x7e,0x0c,0x08,0x00}, /* bubble */
     {0xf0,0x20,0x40,0xf0,0x0f,0x02,0x04,0x0f}, /* zz */
+    {0x18,0x7e,0x7e,0xff,0xff,0x7e,0x7e,0x18}, /* sun */
+    {0x3c,0x70,0xe0,0xe0,0xe0,0xe0,0x70,0x3c}, /* moon */
+    {0x10,0x10,0x38,0x38,0x7c,0x7c,0x38,0x00}, /* drop */
 };
 
 void cz_icon(int icon, int x, int y, int color, int scale) {
@@ -124,9 +135,9 @@ void cz_icon(int icon, int x, int y, int color, int scale) {
 void cz_dim(int a) {
     static const int bayer[2][2] = {{12, 62}, {87, 37}};
     int x, y;
-    for (y = 0; y < CZ_H; y++)
-        for (x = 0; x < CZ_W; x++)
+    for (y = cly0; y < cly1; y++)
+        for (x = clx0; x < clx1; x++)
             if (a > bayer[y & 1][x & 1]) cz_fb[y * CZ_W + x] = CZ_C_DEEP;
-    cz_dy0 = 0;
-    cz_dy1 = CZ_H - 1;
+    if (cly0 < cz_dy0) cz_dy0 = cly0;
+    if (cly1 - 1 > cz_dy1) cz_dy1 = cly1 - 1;
 }

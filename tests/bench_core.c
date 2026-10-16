@@ -55,6 +55,7 @@ static void enter(int screen) {
     case CZ_S_CHECKIN: boot(); cz_checkin("KL"); break;
     case CZ_S_SULK: boot(); run(6UL * 3600000); tap(); break; /* asleep by then; the tap wakes it into Sulk */
     case CZ_S_SLEEP: boot(); run(30000); break;
+    case CZ_S_SETTINGS: boot(); quick_tap(); quick_tap(); break; /* double tap */
     }
     if (cz_screen() != screen) { printf("bench: wanted screen %d, got %d\n", screen, cz_screen()); exit(1); }
 }
@@ -71,7 +72,7 @@ static void blink_phase0(void) {
 }
 
 int main(void) {
-    static const char *const names[CZ_SCREENS] = {"hatch", "home", "feed", "play", "talk", "qr", "checkin", "sulk", "sleep"};
+    static const char *const names[CZ_SCREENS] = {"hatch", "home", "feed", "play", "talk", "qr", "checkin", "sulk", "sleep", "settings"};
     const char *env = getenv("CZ_SLOWDOWN");
     double t[RUNS], t0;
     int s, r, i, y0, y1, rows, frames;
@@ -96,7 +97,8 @@ int main(void) {
         row(names[s], median(t), rows);
     }
 
-    /* idle Home: every tick lands on a blink edge (on at 3850 ms, off at 4000 ms), so every tick draws a blink frame */
+    /* idle Home: every tick lands on a blink edge (on at 3850 ms, off at 4000 ms), so every tick draws a frame
+     * (blink, often with a breath step too) */
     boot();
     rows = 0;
     for (r = 0; r < RUNS; r++) {
@@ -113,12 +115,13 @@ int main(void) {
     }
     row("home_blink", median(t), rows);
 
-    /* nothing changes: 1 ms ticks inside the idle phase, no redraw */
+    /* nothing changes: ticks inside one 600 ms breath step (PRD 2.6: Home is never static for longer), no redraw */
     for (r = 0; r < RUNS; r++) {
         blink_phase0();
+        while (!cz_dirty_rows(&y0, &y1)) { now += 1; cz_tick(now); } /* the next breath step just started */
         frames = 0;
         t0 = now_us();
-        for (i = 0; i < N; i++) { now += 1; cz_tick(now); frames += cz_dirty_rows(&y0, &y1); }
+        for (i = 0; i < N; i++) { now += i % 4 == 0; cz_tick(now); frames += cz_dirty_rows(&y0, &y1); } /* 500 ms */
         t[r] = (now_us() - t0) / N;
         if (frames) { printf("bench: idle run drew %d frames\n", frames); return 1; }
     }

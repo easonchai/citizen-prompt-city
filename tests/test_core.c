@@ -1,7 +1,9 @@
 /* Native tests for the Citizen core. Run with `make test`. Writes every screen to tests/out/<screen>.ppm. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "citizen.h"
+#include "gfx.h" /* cz_anim_box, cz_blit for the animation tests */
 
 static uint32_t now;
 static int fails;
@@ -257,27 +259,155 @@ static void test_brightness(void) {
     uint8_t blob[CZ_SAVE_SIZE];
     boot();
     CHECK(cz_brightness() == 100);
-    quick_tap(); quick_tap();            /* first tap feeds, second is the double tap */
-    CHECK(cz_brightness() == 40);
-    CHECK(cz_screen() == CZ_S_FEED);     /* second tap did not dismiss Feed */
-    now += 400; quick_tap(); quick_tap();
-    CHECK(cz_brightness() == 10);
-    now += 400; quick_tap(); quick_tap();
+    quick_tap(); quick_tap();            /* double tap: Settings; the first tap's feed is undone, so hearts stay at 3 */
     CHECK(cz_brightness() == 100);
-    now += 400; quick_tap(); now += 450; quick_tap(); /* too slow: two single taps */
-    CHECK(cz_brightness() == 100);
-    now += 400; quick_tap(); quick_tap();
-    CHECK(cz_brightness() == 40);
+    CHECK(cz_hearts() == 3);
+    CHECK(cz_screen() == CZ_S_SETTINGS);
     cz_set_brightness(55);
-    CHECK(cz_brightness() == 40);
+    CHECK(cz_brightness() == 100);
     cz_set_brightness(10);
     CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
-    CHECK(blob[2] == 2);
+    CHECK(blob[2] == 3);
     cz_init(0, blob, sizeof blob, 0);
     CHECK(cz_brightness() == 10);
     CHECK(cz_screen() != CZ_S_HATCH);
     cz_init(0, NULL, 0, 0);
     CHECK(cz_brightness() == 100);
+}
+
+static void swipe(int dir) {
+    cz_touch(CZ_TOUCH_DOWN, 120 - 30 * dir, 120, now);
+    now += 100; cz_touch(CZ_TOUCH_MOVE, 120 + 30 * dir, 121, now);
+    now += 50; cz_touch(CZ_TOUCH_UP, 120 + 30 * dir, 121, now);
+    now += 400;
+}
+
+static void hold(void) { cz_touch(CZ_TOUCH_DOWN, 120, 120, now); run(1100); cz_touch(CZ_TOUCH_UP, 120, 120, now); now += 400; }
+
+static void test_settings(void) {
+    int i;
+    boot();
+    cz_set_clock(12 * 60);
+    quick_tap(); quick_tap();
+    CHECK(cz_screen() == CZ_S_SETTINGS);
+    check_and_write("settings");
+    swipe(1); CHECK(cz_brightness() == 40);  /* brightness applies at once */
+    swipe(1); CHECK(cz_brightness() == 10);
+    swipe(-1); CHECK(cz_brightness() == 40);
+    swipe(1); swipe(1); CHECK(cz_brightness() == 100);
+    tap();                                   /* Clock */
+    swipe(1); CHECK(cz_clock() == 12 * 60 + 15);
+    swipe(-1); swipe(-1); CHECK(cz_clock() == 11 * 60 + 45);
+    CHECK(cz_brightness() == 100);
+    check_and_write("settings_clock");
+    tap();                                   /* Timezone: +1 h moves the local clock */
+    swipe(1); CHECK(cz_timezone() == 9); CHECK(cz_clock() == 12 * 60 + 45);
+    swipe(-1); CHECK(cz_timezone() == 8);
+    tap(); tap();                            /* Citizen, WiFi */
+    CHECK(cz_host_request() == CZ_REQ_NONE);
+    swipe(1); CHECK(cz_host_request() == CZ_REQ_PORTAL); CHECK(cz_host_request() == CZ_REQ_NONE);
+    tap();                                   /* Update: check, then install once the host reports one */
+    swipe(1); CHECK(cz_host_request() == CZ_REQ_CHECK_UPDATE);
+    cz_set_version("1.1.0"); cz_set_update("1.2.0");
+    swipe(1); CHECK(cz_host_request() == CZ_REQ_INSTALL_UPDATE); CHECK(cz_host_request() == CZ_REQ_NONE);
+    check_and_write("settings_update");
+    CHECK(cz_screen() == CZ_S_SETTINGS);
+    hold(); CHECK(cz_screen() == CZ_S_HOME); /* hold exits */
+
+    quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
+    run(19900); CHECK(cz_screen() == CZ_S_SETTINGS);
+    run(200); CHECK(cz_screen() == CZ_S_HOME); /* 20 s idle exits */
+
+    quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
+    for (i = 0; i < 7; i++) tap();           /* tap cycles to Exit */
+    CHECK(cz_screen() == CZ_S_SETTINGS);
+    swipe(1); CHECK(cz_screen() == CZ_S_HOME);
+
+    /* a double tap that starts off Home (QR dismiss) is two plain taps */
+    hold(); CHECK(cz_screen() == CZ_S_QR);
+    quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_FEED);
+}
+
+static void test_clock(void) {
+    uint8_t blob[CZ_SAVE_SIZE];
+    static const int at[4] = {3 * 60, 7 * 60, 12 * 60, 18 * 60 + 30};
+    static const char *const names[4] = {"home_0300", "home_0700", "home_1200", "home_1830"};
+    int sky[4], i, j;
+    boot();
+    CHECK(cz_clock() == -1);
+    CHECK(cz_timezone() == 8);
+    sky[0] = cz_framebuffer()[20 * CZ_W + 20];
+    cz_set_clock(3 * 60);
+    CHECK(cz_framebuffer()[20 * CZ_W + 20] == sky[0]); /* unknown renders night */
+    cz_set_clock(23 * 60 + 59);
+    run(60000);
+    CHECK(cz_clock() == 0);                  /* minutes advance with ticks and wrap at midnight */
+    cz_set_clock(12 * 60);
+    run(61000);
+    CHECK(cz_clock() == 12 * 60 + 1);
+    cz_set_timezone(-3); cz_set_timezone(15);
+    CHECK(cz_timezone() == -3);
+    CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
+    now = 5;
+    cz_init(0, blob, sizeof blob, 2 * 3600 + 30); /* deep sleep of 2 h 30 s */
+    CHECK(cz_clock() == 14 * 60 + 1);
+    CHECK(cz_timezone() == -3);
+    cz_init(0, blob, sizeof blob, 8 * 86400 + 60); /* longer than the 7-day age cap: time of day still exact */
+    CHECK(cz_clock() == 12 * 60 + 2);
+    blob[2] = 2; /* a version 2 blob (pre-clock firmware) still restores, clock unknown */
+    { uint32_t h = 2166136261UL; int k; for (k = 0; k < 27; k++) { h ^= blob[k]; h *= 16777619UL; }
+      for (k = 27; k < CZ_SAVE_SIZE - 4; k++) { h ^= 0; h *= 16777619UL; }
+      for (k = 27; k < CZ_SAVE_SIZE; k++) blob[k] = 0;
+      blob[60] = (uint8_t)h; blob[61] = (uint8_t)(h >> 8); blob[62] = (uint8_t)(h >> 16); blob[63] = (uint8_t)(h >> 24); }
+    cz_init(0, blob, sizeof blob, 0);
+    CHECK(cz_screen() != CZ_S_HATCH);
+    CHECK(cz_clock() == -1);
+    CHECK(cz_timezone() == 8);
+
+    boot();
+    for (i = 0; i < 4; i++) {
+        cz_set_clock(at[i]);
+        sky[i] = cz_framebuffer()[20 * CZ_W + 20];
+        check_and_write(names[i]);
+    }
+    printf("  sky at (20,20): 03:00=%d 07:00=%d 12:00=%d 18:30=%d\n", sky[0], sky[1], sky[2], sky[3]);
+    for (i = 0; i < 4; i++) for (j = i + 1; j < 4; j++) CHECK(sky[i] != sky[j]);
+}
+
+static void test_qr(void) {
+    const uint8_t *fb;
+    int px, py, p, x, ox, run_len, m, cx, cy;
+    boot();
+    cz_set_qr_url("https://prmpt.city/c/tenuk-d2e8");
+    hold();
+    CHECK(cz_screen() == CZ_S_QR);
+    check_and_write("qr_slug");
+    fb = cz_framebuffer();
+    for (py = 0; py < 188 && fb[py * CZ_W + 120] != CZ_C_INK; py++) {}  /* panel top at the centre column */
+    for (px = 120; px > 0 && fb[(py + 1) * CZ_W + px - 1] == CZ_C_INK; px--) {}
+    for (x = 120; x < CZ_W && fb[(py + 1) * CZ_W + x] == CZ_C_INK; x++) {}
+    p = x - px;
+    for (ox = 0; fb[(py + ox) * CZ_W + px + ox] != CZ_C_DEEP; ox++) {}  /* diagonal to the finder corner: quiet zone */
+    for (run_len = 0; fb[(py + ox) * CZ_W + px + ox + run_len] == CZ_C_DEEP; run_len++) {}
+    m = run_len / 7;
+    printf("  qr \"https://prmpt.city/c/tenuk-d2e8\": %d px modules, %d modules, panel %d px at (%d,%d), quiet %d px\n",
+           m, p / m - 4, p, px, py, ox);
+    CHECK(run_len == 7 * m && ox == 2 * m);  /* finder is 7 modules, quiet zone 2 */
+    CHECK(m == 6);                           /* version 2 fits */
+    CHECK(p == (p / m) * m);
+    CHECK(px + p + px == CZ_W);              /* centred across */
+    CHECK(py + p == 188 && fb[188 * CZ_W + 120] == CZ_C_GOLD); /* rests on the gold band */
+    /* every code corner inside the round glass (radius 120 around (120,120)) */
+    cx = px + ox - 120; cy = py + ox - 120;
+    CHECK(cx * cx + cy * cy <= 121 * 121);
+
+    cz_set_qr_url("https://prmpt.city/c/kenyalang-7f3a9c");
+    fb = cz_framebuffer();
+    for (py = 0; py < 188 && fb[py * CZ_W + 120] != CZ_C_INK; py++) {}
+    for (px = 120; px > 0 && fb[(py + 1) * CZ_W + px - 1] == CZ_C_INK; px--) {}
+    for (ox = 0; fb[(py + ox) * CZ_W + px + ox] != CZ_C_DEEP; ox++) {}
+    printf("  qr longer slug: quiet %d px -> %d px modules\n", ox, ox / 2);
+    CHECK(ox == 10);                          /* version 3: 5 px */
 }
 
 static void test_dismiss(void) {
@@ -337,16 +467,114 @@ static void test_hatch_rise(void) {
     CHECK(top[1] - top[2] == 122 - 100);       /* ease-out: y 122 at mid, 100 at end */
 }
 
+/* PRD 2.6: four consecutive animation steps on one screen. Each differs from the one before, changes nothing
+ * outside the box the core declares for the screen, and equals a full redraw of the same state. */
+static void check_anim(const char *name, int screen) {
+    static uint8_t prev[CZ_W * CZ_H], cur[CZ_W * CZ_H];
+    int bx, by, bw, bh, step, i, y0, y1, changed, outside, same, rows = 0;
+    uint32_t t;
+    CHECK(cz_screen() == screen);
+    cz_anim_box(screen, &bx, &by, &bw, &bh);
+    CHECK(bw > 0 && bh > 0);
+    cz_tick(now);         /* catch the core up to the test clock first */
+    cz_set_name("TENUK"); /* full frame as the baseline */
+    memcpy(prev, cz_framebuffer(), sizeof prev);
+    cz_dirty_rows(&y0, &y1);
+    for (step = 0; step < 4; step++) {
+        for (t = 0; t < 2000 && !cz_dirty_rows(&y0, &y1); t += 10) { now += 10; cz_tick(now); }
+        CHECK(t < 2000);
+        CHECK(cz_screen() == screen);
+        memcpy(cur, cz_framebuffer(), sizeof cur);
+        changed = outside = 0;
+        for (i = 0; i < CZ_W * CZ_H; i++)
+            if (cur[i] != prev[i]) {
+                int x = i % CZ_W, y = i / CZ_W;
+                changed++;
+                outside += x < bx || x >= bx + bw || y < by || y >= by + bh;
+            }
+        if (!changed || outside) printf("  anim %s step %d: %d px changed, %d outside the box\n", name, step, changed, outside);
+        CHECK(changed > 0);
+        CHECK(outside == 0);
+        CHECK(y0 >= by && y1 < by + bh); /* the partial frame pushes only box rows */
+        if (y1 - y0 + 1 > rows) rows = y1 - y0 + 1;
+        cz_set_name("TENUK");            /* full redraw of the same state */
+        same = memcmp(cur, cz_framebuffer(), sizeof cur) == 0;
+        CHECK(same);
+        cz_dirty_rows(&y0, &y1);
+        memcpy(prev, cur, sizeof prev);
+    }
+    printf("  anim %-7s box (%d,%d)-(%d,%d), 4 steps, max dirty rows %d\n", name, bx, by, bx + bw, by + bh, rows);
+}
+
+static void test_anim(void) {
+    static uint8_t base[CZ_W * CZ_H];
+    int i, x, y, y0, y1, outside = 0, frames = 0, rows = 0, top[2], bot[2], sq;
+    boot(); check_anim("home", CZ_S_HOME);
+    boot(); tap(); check_anim("feed", CZ_S_FEED);
+    boot(); swipe(1); check_anim("play", CZ_S_PLAY);
+    boot(); cz_message("What did you ship"); check_anim("talk", CZ_S_TALK);
+    boot(); hold(); check_anim("qr", CZ_S_QR);
+    boot(); cz_checkin("KL"); check_anim("checkin", CZ_S_CHECKIN);
+    boot(); run(6UL * 3600000); tap(); check_anim("sulk", CZ_S_SULK);
+    boot(); run(31000); check_anim("sleep", CZ_S_SLEEP);
+
+    /* Home across 10 s: no pixel outside the sprite box (56,36)-(184,174) changes, idle frames <= 130 rows */
+    boot();
+    cz_set_name("TENUK");
+    memcpy(base, cz_framebuffer(), sizeof base);
+    cz_dirty_rows(&y0, &y1);
+    for (i = 0; i < 200; i++) {
+        now += 50; cz_tick(now);
+        if (!cz_dirty_rows(&y0, &y1)) continue;
+        frames++;
+        if (y1 - y0 + 1 > rows) rows = y1 - y0 + 1;
+        for (y = 0; y < CZ_H; y++)
+            for (x = 0; x < CZ_W; x++)
+                if ((x < 56 || x >= 184 || y < 36 || y >= 174) && cz_fb[y * CZ_W + x] != base[y * CZ_W + x]) outside++;
+    }
+    printf("  home 10 s: %d frames, max %d rows, %d px changed outside the sprite box\n", frames, rows, outside);
+    CHECK(cz_screen() == CZ_S_HOME && frames >= 16 && rows <= 130 && outside == 0);
+
+    /* squash: the same sprite 2 px shorter at 2x, top lowered, feet where they were */
+    for (sq = 0; sq < 2; sq++) {
+        cz_rect(0, 0, CZ_W, CZ_H, CZ_C_NAVY);
+        cz_blit(cz_sprite(CZ_TAPIR, CZ_PLAY), 0, 0, 2, sq);
+        for (top[sq] = 0; top[sq] < CZ_H && count_color(cz_fb, 0, top[sq], CZ_W, top[sq] + 1, CZ_C_NAVY, 0) == 0; top[sq]++) {}
+        for (bot[sq] = CZ_H - 1; bot[sq] > 0 && count_color(cz_fb, 0, bot[sq], CZ_W, bot[sq] + 1, CZ_C_NAVY, 0) == 0; bot[sq]--) {}
+    }
+    CHECK(top[1] == top[0] + 2 && bot[1] == bot[0]);
+    cz_set_name("TENUK"); /* repaint the screen the blit test scribbled on */
+}
+
+
+static void test_double_tap_undoes_feed(void) {
+    int h, hunger_before;
+    boot();
+    run(1000);
+    h = cz_hearts(); hunger_before = (int)cz_hunger_ms();
+    quick_tap(); CHECK(cz_screen() == CZ_S_FEED);
+    run(100); quick_tap();
+    CHECK(cz_screen() == CZ_S_SETTINGS);
+    CHECK(cz_hearts() == h);
+    CHECK((int)cz_hunger_ms() >= hunger_before);
+    printf("  double tap: feed undone, hearts stay %d, settings open\n", cz_hearts());
+}
+
 int main(void) {
     test_flow();
     test_save();
     test_screens();
     test_telemetry();
     test_brightness();
+    test_settings();
+    test_clock();
+    test_qr();
     test_dismiss();
     test_dither();
     test_hatch_rise();
+    test_anim();
     if (fails) { printf("%d check(s) failed\n", fails); return 1; }
+    test_double_tap_undoes_feed();
     printf("all core tests passed\n");
     return 0;
 }

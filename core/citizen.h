@@ -20,12 +20,12 @@ extern "C" {
 
 enum cz_creature { CZ_TAPIR = 0, CZ_HORNBILL = 1, CZ_TIGER = 2, CZ_CREATURES = 3 };
 enum cz_pose { CZ_IDLE, CZ_BLINK, CZ_EAT, CZ_PLAY, CZ_SLEEP, CZ_SULK, CZ_TALK, CZ_CHEER, CZ_POSES };
-enum cz_screen { CZ_S_HATCH, CZ_S_HOME, CZ_S_FEED, CZ_S_PLAY, CZ_S_TALK, CZ_S_QR, CZ_S_CHECKIN, CZ_S_SULK, CZ_S_SLEEP, CZ_SCREENS };
+enum cz_screen { CZ_S_HATCH, CZ_S_HOME, CZ_S_FEED, CZ_S_PLAY, CZ_S_TALK, CZ_S_QR, CZ_S_CHECKIN, CZ_S_SULK, CZ_S_SLEEP, CZ_S_SETTINGS, CZ_SCREENS };
 enum cz_touch { CZ_TOUCH_DOWN = 0, CZ_TOUCH_MOVE = 1, CZ_TOUCH_UP = 2 };
 
 /* Palette indices used by the framebuffer and the sprites. 0 is transparent in sprites only. */
 enum cz_color { CZ_C_TRANSPARENT = 0, CZ_C_NAVY, CZ_C_DUSK, CZ_C_DEEP, CZ_C_INK, CZ_C_GOLD, CZ_C_CORAL, CZ_C_TEAL,
-                CZ_C_CHAR, CZ_C_PINK, CZ_C_PALE, CZ_C_COUNT };
+                CZ_C_CHAR, CZ_C_PINK, CZ_C_PALE, CZ_C_DAYSKY, CZ_C_DAYHORIZON, CZ_C_ROSE, CZ_C_CLOUD, CZ_C_COUNT };
 
 /* Lifecycle.
  * saved may be NULL. If it is a valid blob from cz_save the pet resumes, including time that passed
@@ -56,9 +56,23 @@ int  cz_dirty_rows(int *y0, int *y1);          /* like cz_dirty, but also return
 enum cz_stat { CZ_STAT_FRAMES = 0, CZ_STAT_PIXELS_FILLED, CZ_STAT_SPRITE_PIXELS, CZ_STAT_TEXT_GLYPHS, CZ_STAT_COUNT };
 uint32_t cz_stat(int which);                   /* monotonic counters since init */
 
-/* Brightness: 100, 40 or 10. Double tap cycles it. The host drives the backlight. */
+/* Brightness: 100, 40 or 10, chosen in Settings. The host drives the backlight. */
 int  cz_brightness(void);
 void cz_set_brightness(int pct);
+
+/* Clock (v1.1). Minutes since local midnight, 0..1439; -1 = unknown. Persisted. */
+void cz_set_clock(int minute_of_day);
+int  cz_clock(void);
+int  cz_timezone(void);                        /* UTC offset in hours, from Settings, default 8 */
+void cz_set_timezone(int hours);
+
+/* Settings (v1.1). The host feeds what the screen shows and polls for actions it must perform. */
+enum cz_wifi_state { CZ_WIFI_OFF = 0, CZ_WIFI_CONNECTING, CZ_WIFI_OK, CZ_WIFI_FAIL };
+void cz_set_version(const char *running);      /* e.g. "1.1.0" */
+void cz_set_update(const char *available);     /* "" or NULL = up to date */
+void cz_set_wifi(const char *ssid, int state);
+enum cz_request { CZ_REQ_NONE = 0, CZ_REQ_PORTAL, CZ_REQ_CHECK_UPDATE, CZ_REQ_INSTALL_UPDATE, CZ_REQ_FACTORY_RESET };
+int  cz_host_request(void);                    /* returns one pending request and clears it */
 
 /* Introspection for the simulator and tests. */
 int  cz_screen(void);

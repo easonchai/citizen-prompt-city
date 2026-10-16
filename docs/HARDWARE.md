@@ -7,7 +7,7 @@ Board: ESP32-2424S012C. Source: rzeldent/platformio-espressif32-sunton board def
 | Item | Value |
 |---|---|
 | MCU | ESP32-C3-MINI-1U, single RISC-V core, 160 MHz, 400 KB SRAM (327,680 bytes usable), no PSRAM |
-| Flash | 4 MB. Partition `huge_app.csv`: 3 MB app, 1 MB SPIFFS, no OTA |
+| Flash | 4 MB. Partition `min_spiffs.csv`: two 1.9 MB OTA app slots, 128 KB SPIFFS |
 | Display | GC9A01, 240x240 round IPS, SPI2: MOSI 7, SCLK 6, CS 10, DC 2, no MISO, no reset pin, BGR, mirror X. 40 MHz default, 80 MHz possible |
 | Backlight | GPIO 3, active high, PWM |
 | Touch | CST816S/D capacitive, I2C: SDA 4, SCL 5, RST 1, INT 0, address 0x15, 400 kHz, one point, gestures in hardware (not used) |
@@ -35,14 +35,15 @@ Board: ESP32-2424S012C. Source: rzeldent/platformio-espressif32-sunton board def
 
 ## Partition
 
-`huge_app.csv`: 3 MB app (3,145,728 bytes), 1 MB SPIFFS, no OTA. Chosen because WiFi, HTTPClient, LovyanGFX and the core must fit under 3 MB with room. The cost is no over-the-air updates; flash over USB-C.
+`min_spiffs.csv`: nvs 0x9000 (20 KB), otadata 0xe000 (8 KB), app0 0x10000 and app1 0x1F0000 (1,966,080 bytes each), SPIFFS 0x3D0000 (128 KB), coredump 0x3F0000 (64 KB). Two app slots let the badge update over WiFi (F11): the new build is written to the idle slot and booted on success. nvs keeps its offset, so Preferences (save blob, WiFi, settings) survive the switch from `huge_app.csv`. The USB flasher writes bootloader 0x0, partitions 0x8000, boot_app0 0xe000, firmware 0x10000.
 
 ## Build numbers
 
-Verified build, 16 Oct 2026 (v2 firmware), `pio run -e citizen`, as recorded in PRD section 1.1:
+Verified build, 16 Oct 2026 (firmware 1.1.0, `min_spiffs.csv`), `pio run -e citizen`:
 
-- Flash: 1,131,454 of 3,145,728 bytes
-- RAM: 108,460 of 327,680 bytes
+- Flash: 1,171,402 of 1,966,080 bytes (59.6%)
+- RAM: 108,956 of 327,680 bytes (33.3%)
+- `firmware.bin`: 1,218,768 bytes
 
 Includes WiFi, HTTP, captive portal, LovyanGFX and all sprites.
 

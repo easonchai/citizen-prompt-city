@@ -25,7 +25,10 @@
 
 #define SAVE_MAGIC0 'C'
 #define SAVE_MAGIC1 'Z'
-#define SAVE_VERSION 2
+#define SAVE_VERSION 3 /* 3 adds clock and timezone; version 2 blobs still restore */
+#define DAY_MS 86400000UL
+#define SETTINGS_IDLE_MS 20000UL
+enum { SET_BRIGHT, SET_CLOCK, SET_TZ, SET_CITIZEN, SET_WIFI, SET_UPDATE, SET_ABOUT, SET_EXIT, SET_N };
 
 static const char *const DEFAULT_NAME[CZ_CREATURES] = {"TENUK", "KENYALANG", "HARIMAU"};
 static const char DEFAULT_PROMPT[] = "YOU ARE A SKEPTICAL OPS LEAD WHO EATS CLEAN DATA";
@@ -38,8 +41,14 @@ static struct {
     int have_now;
     /* gesture */
     int down, consumed, x0, y0, maxd, tapped; /* tapped: last_tap is a tap that can start a double tap */
+    int undo_ok, undo_hearts, undo_lost; uint32_t undo_hunger; /* the feed a first tap did, undone if a double tap follows */
     uint32_t t0, last_tap;
     int brightness;
+    int tap_home; /* the last tap landed on Home or Sulk, so a quick second tap opens Settings */
+    /* clock and settings */
+    int clock_known, tz, sel, wifi_state;
+    uint32_t day_ms, reqs; /* reqs: bitmask of pending enum cz_request */
+    char version[16], update[16], ssid[33], set_value[48];
     /* content */
     char name[NAME_MAX + 1], prompt[CZ_PROMPT_MAX + 1], msg[CZ_MSG_MAX + 1], city[CITY_MAX + 1], url[URL_MAX + 1];
     /* rendering */
@@ -85,15 +94,6 @@ static int prompt_len(void) { int n = 0; while (S.prompt[n]) n++; return n; }
 #define HATCH_Y_REST 100
 int cz_hatch_y = HATCH_Y_REST; /* read by screens.c */
 
-/* Idle breathing: the pet bobs 0,1,2,1 px on Home and Sulk every 600 ms, and every 1200 ms asleep. */
-#define BREATH_STEP_MS 600
-int cz_breath_dy = 0; /* read by screens.c */
-static int breath_dy(void) {
-    static const int table[4] = { 0, 1, 2, 1 };
-    uint32_t step = S.screen == CZ_S_SLEEP ? BREATH_STEP_MS * 2 : BREATH_STEP_MS;
-    if (S.screen != CZ_S_HOME && S.screen != CZ_S_SULK && S.screen != CZ_S_SLEEP) return 0;
-    return table[(S.anim_ms / step) & 3];
-}
 static int hatch_y(void) {
     uint32_t t = (uint32_t)prompt_len() * HATCH_CHAR_MS, u;
     if (S.screen_ms <= t) return HATCH_Y_HIDDEN;
@@ -112,12 +112,21 @@ static uint32_t event_ms(int screen) {
     }
 }
 
+static void clock_add(uint32_t ms) {
+    uint32_t m = S.day_ms / MIN_MS;
+    if (!S.clock_known) return;
+    S.day_ms = (S.day_ms + ms % DAY_MS) % DAY_MS;
+    if (S.screen == CZ_S_SETTINGS && S.day_ms / MIN_MS != m) S.stale = 1; /* the Clock row shows minutes */
+}
+
 static void advance(uint32_t now) {
     uint32_t dt, limit;
+    if (S.undo_ok && S.screen != CZ_S_FEED) S.undo_ok = 0;
     if (!S.have_now) { S.have_now = 1; S.last_now = now; return; }
     dt = now - S.last_now; /* wraps correctly */
     S.last_now = now;
     age(dt);
+    clock_add(dt);
     S.screen_ms += dt;
     S.idle_ms += dt;
     limit = event_ms(S.screen);
@@ -128,14 +137,17 @@ static void advance(uint32_t now) {
     if (S.screen == CZ_S_HOME && sulking()) S.screen = CZ_S_SULK;
     if (S.screen == CZ_S_SULK && !sulking()) S.screen = CZ_S_HOME;
     if ((S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) && S.idle_ms >= IDLE_SLEEP_MS) go(CZ_S_SLEEP);
+    if (S.screen == CZ_S_SETTINGS && S.idle_ms >= SETTINGS_IDLE_MS) go(base_screen());
     /* hold fires while the finger is still down */
     if (S.down && !S.consumed && S.maxd < TAP_PX && now - S.t0 >= HOLD_MS) {
         S.consumed = 1;
         if (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) go(CZ_S_QR);
+        else if (S.screen == CZ_S_SETTINGS) go(base_screen());
     }
 }
 
 static void feed(void) {
+    S.undo_hearts = S.hearts; S.undo_hunger = S.hunger_ms; S.undo_lost = S.lost; S.undo_ok = 1;
     if (S.hearts < 4) S.hearts++;
     S.hunger_ms = 0;
     S.lost = 0;
@@ -153,23 +165,61 @@ static void play(void) {
 }
 
 static void gesture_tap(uint32_t now) {
-    if (S.tapped && now - S.last_tap < DOUBLE_TAP_MS) { /* second tap: brightness only, no tap action */
+    int home = S.screen == CZ_S_HOME || S.screen == CZ_S_SULK;
+    if (S.tapped && S.tap_home && now - S.last_tap < DOUBLE_TAP_MS) { /* second tap: open Settings, no tap action */
         S.tapped = 0;
-        S.brightness = S.brightness == 100 ? 40 : S.brightness == 40 ? 10 : 100;
+        if (S.undo_ok && S.screen == CZ_S_FEED) { /* the first tap fed the pet: take that back, Settings is free */
+            S.hearts = S.undo_hearts; S.hunger_ms = S.undo_hunger; S.lost = S.undo_lost;
+        }
+        S.undo_ok = 0;
+        S.sel = SET_BRIGHT;
+        go(CZ_S_SETTINGS);
         return;
     }
     S.tapped = 1;
+    S.tap_home = home;
     S.last_tap = now;
-    if (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) feed();
+    if (home) feed();
+    else if (S.screen == CZ_S_SETTINGS) { S.sel = (S.sel + 1) % SET_N; S.stale = 1; }
     else if (S.screen != CZ_S_HATCH) go(base_screen()); /* Sleep, QR and every event screen */
 }
 
-static void gesture_swipe(void) {
+/* Settings swipe: dir +1 (right) changes forward or activates, -1 (left) changes back. */
+static void setting_change(int dir) {
+    static const int bright[3] = {100, 40, 10};
+    int i, m;
+    switch (S.sel) {
+    case SET_BRIGHT:
+        for (i = 0; i < 2 && bright[i] != S.brightness; i++) {}
+        S.brightness = bright[(i + (dir > 0 ? 1 : 2)) % 3];
+        break;
+    case SET_CLOCK:
+        m = S.clock_known ? (int)(S.day_ms / MIN_MS) : 0;
+        m = dir > 0 ? (m / 15 + 1) * 15 : m % 15 ? m / 15 * 15 : m - 15;
+        S.day_ms = (uint32_t)((m + 1440) % 1440) * MIN_MS;
+        S.clock_known = 1;
+        break;
+    case SET_TZ: /* the clock is local time, so it moves with the zone */
+        if (S.tz + dir < -12 || S.tz + dir > 14) return;
+        S.tz += dir;
+        if (S.clock_known) S.day_ms = (S.day_ms + (dir > 0 ? 60 : 1380) * MIN_MS) % DAY_MS;
+        break;
+    case SET_CITIZEN: cz_set_creature((S.creature + (dir > 0 ? 1 : CZ_CREATURES - 1)) % CZ_CREATURES); break;
+    case SET_WIFI: if (dir > 0) S.reqs |= 1u << CZ_REQ_PORTAL; break;
+    case SET_UPDATE: if (dir > 0) S.reqs |= 1u << (S.update[0] ? CZ_REQ_INSTALL_UPDATE : CZ_REQ_CHECK_UPDATE); break;
+    case SET_EXIT: if (dir > 0) { go(base_screen()); return; } break;
+    default: break;
+    }
+    S.stale = 1;
+}
+
+static void gesture_swipe(int dir) {
     if (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) play();
+    else if (S.screen == CZ_S_SETTINGS) setting_change(dir);
 }
 
 void cz_touch(int kind, int x, int y, uint32_t now_ms) {
-    int dx = x - S.x0, dy = y - S.y0, d;
+    int dx = x - S.x0, dy = y - S.y0, d, dir = dx > 0 ? 1 : -1;
     advance(now_ms);
     S.idle_ms = 0;
     if (kind == CZ_TOUCH_DOWN) {
@@ -181,7 +231,7 @@ void cz_touch(int kind, int x, int y, uint32_t now_ms) {
     if (dy < 0) dy = -dy;
     d = dx > dy ? dx : dy;
     if (d > S.maxd) S.maxd = d;
-    if (!S.consumed && dx >= SWIPE_PX && now_ms - S.t0 <= SWIPE_MS) { S.consumed = 1; gesture_swipe(); }
+    if (!S.consumed && dx >= SWIPE_PX && now_ms - S.t0 <= SWIPE_MS) { S.consumed = 1; gesture_swipe(dir); }
     if (kind == CZ_TOUCH_UP) {
         if (!S.consumed && now_ms - S.t0 < TAP_MS && S.maxd < TAP_PX) gesture_tap(now_ms);
         S.down = 0;
@@ -190,7 +240,8 @@ void cz_touch(int kind, int x, int y, uint32_t now_ms) {
 
 void cz_tick(uint32_t now_ms) { advance(now_ms); }
 
-/* ---- save blob: magic(2) version creature hearts hatched lost brightness hunger_s(4) play_s(4) name(11) ... crc(4) at the end */
+/* ---- save blob: magic(2) version creature hearts hatched lost brightness hunger_s(4) play_s(4) name(11)
+ * tz+12(1) day_s(4, 0xFFFFFFFF = clock unknown) ... crc(4) at the end */
 static uint32_t checksum(const uint8_t *p, int n) { /* FNV-1a */
     uint32_t h = 2166136261UL;
     while (n--) { h ^= *p++; h *= 16777619UL; }
@@ -210,14 +261,22 @@ int cz_save(uint8_t *out, int cap) {
     put32(out + 8, S.hunger_ms / 1000);
     put32(out + 12, S.play_age_ms / 1000);
     for (i = 0; i < NAME_MAX && S.name[i]; i++) out[16 + i] = (uint8_t)S.name[i];
+    out[27] = (uint8_t)(S.tz + 12);
+    put32(out + 28, S.clock_known ? S.day_ms / 1000 : 0xFFFFFFFFUL);
     put32(out + CZ_SAVE_SIZE - 4, checksum(out, CZ_SAVE_SIZE - 4));
     return CZ_SAVE_SIZE;
 }
 
 static int restore(const uint8_t *b, int len) {
-    if (!b || len < CZ_SAVE_SIZE || b[0] != SAVE_MAGIC0 || b[1] != SAVE_MAGIC1 || b[2] != SAVE_VERSION) return 0;
+    if (!b || len < CZ_SAVE_SIZE || b[0] != SAVE_MAGIC0 || b[1] != SAVE_MAGIC1 || (b[2] != 2 && b[2] != SAVE_VERSION)) return 0;
     if (get32(b + CZ_SAVE_SIZE - 4) != checksum(b, CZ_SAVE_SIZE - 4)) return 0;
     if (b[3] >= CZ_CREATURES || b[4] > 4 || b[6] > 4 || (b[7] != 100 && b[7] != 40 && b[7] != 10)) return 0;
+    if (b[2] == SAVE_VERSION && (b[27] > 26 || (get32(b + 28) >= 86400 && get32(b + 28) != 0xFFFFFFFFUL))) return 0;
+    if (b[2] == SAVE_VERSION) {
+        S.tz = b[27] - 12;
+        S.clock_known = get32(b + 28) != 0xFFFFFFFFUL;
+        S.day_ms = S.clock_known ? get32(b + 28) * 1000 : 0;
+    }
     S.creature = b[3]; S.hearts = b[4]; S.hatched = b[5] != 0; S.lost = b[6]; S.brightness = b[7];
     S.hunger_ms = get32(b + 8) > AGE_CAP_MS / 1000 ? AGE_CAP_MS : get32(b + 8) * 1000;
     S.play_age_ms = get32(b + 12) > AGE_CAP_MS / 1000 ? AGE_CAP_MS : get32(b + 12) * 1000;
@@ -226,7 +285,7 @@ static int restore(const uint8_t *b, int len) {
 }
 
 static void default_url(void) {
-    static const char base[] = "https://prmpt.city/c/";
+    static const char base[] = "https://citizen-eason-chai-jun-weis-projects.vercel.app/c/";
     int n = 0, i;
     for (i = 0; base[i]; i++) S.url[n++] = base[i];
     for (i = 0; S.name[i] && n < URL_MAX; i++) S.url[n++] = (S.name[i] >= 'A' && S.name[i] <= 'Z') ? (char)(S.name[i] + 32) : S.name[i];
@@ -241,8 +300,10 @@ void cz_init(uint32_t seed, const uint8_t *saved, int saved_len, uint32_t slept_
     copy(S.city, sizeof S.city, "KL");
     S.stale = 1;
     S.brightness = 100;
+    S.tz = 8;
     for (i = 0; i < CZ_STAT_COUNT; i++) cz_stats[i] = 0;
     if (restore(saved, saved_len)) {
+        clock_add((slept_seconds % 86400) * 1000); /* before the 7-day cap so the time of day stays exact */
         if (slept_seconds > AGE_CAP_MS / 1000) slept_seconds = AGE_CAP_MS / 1000;
         age(slept_seconds * 1000);
     } else {
@@ -266,6 +327,31 @@ void cz_set_prompt(const char *prompt) { copy(S.prompt, sizeof S.prompt, prompt)
 int cz_brightness(void) { return S.brightness; }
 void cz_set_brightness(int pct) { if (pct == 100 || pct == 40 || pct == 10) S.brightness = pct; }
 void cz_set_qr_url(const char *url) { copy(S.url, sizeof S.url, url); S.stale = 1; }
+
+void cz_set_clock(int minute_of_day) {
+    if (minute_of_day >= 1440) return;
+    S.clock_known = minute_of_day >= 0;
+    S.day_ms = S.clock_known ? (uint32_t)minute_of_day * MIN_MS : 0;
+    if (S.screen == CZ_S_SETTINGS) S.stale = 1;
+}
+int cz_clock(void) { return S.clock_known ? (int)(S.day_ms / MIN_MS) : -1; }
+int cz_timezone(void) { return S.tz; }
+void cz_set_timezone(int hours) { if (hours >= -12 && hours <= 14) { S.tz = hours; if (S.screen == CZ_S_SETTINGS) S.stale = 1; } }
+
+/* Host-fed Settings values: only a visible Settings screen needs a redraw, so idle frames stay small. */
+void cz_set_version(const char *running) { copy(S.version, sizeof S.version, running); if (S.screen == CZ_S_SETTINGS) S.stale = 1; }
+void cz_set_update(const char *available) { copy(S.update, sizeof S.update, available); if (S.screen == CZ_S_SETTINGS) S.stale = 1; }
+void cz_set_wifi(const char *ssid, int state) {
+    copy(S.ssid, sizeof S.ssid, ssid);
+    S.wifi_state = state >= CZ_WIFI_OFF && state <= CZ_WIFI_FAIL ? state : CZ_WIFI_OFF;
+    if (S.screen == CZ_S_SETTINGS) S.stale = 1;
+}
+int cz_host_request(void) {
+    int r;
+    for (r = CZ_REQ_PORTAL; r <= CZ_REQ_FACTORY_RESET; r++)
+        if (S.reqs & 1u << r) { S.reqs &= ~(1u << r); return r; }
+    return CZ_REQ_NONE;
+}
 
 void cz_message(const char *text) {
     if (S.screen == CZ_S_HATCH) return;
@@ -294,12 +380,63 @@ int cz_pose(void) {
     }
 }
 
+/* ---- Settings text */
+static const char *const SET_LABEL[SET_N] = {"BRIGHTNESS", "CLOCK", "TIMEZONE", "CITIZEN", "WIFI", "UPDATE", "ABOUT", "EXIT"};
+
+static char *put(char *d, const char *s, int max) { while (*s && max--) *d++ = *s++; *d = 0; return d; }
+static char *num(char *d, int v, int width) { /* decimal, zero padded to width */
+    char t[8];
+    int n = 0;
+    if (v < 0) { *d++ = '-'; v = -v; }
+    do { t[n++] = (char)('0' + v % 10); v /= 10; } while (v || n < width);
+    while (n) *d++ = t[--n];
+    *d = 0;
+    return d;
+}
+
+static const char *setting_value(void) {
+    static const char *const wifi[4] = {"OFF", "CONNECTING", "OK", "FAIL"};
+    char *d = S.set_value;
+    const char *slug = S.url;
+    int i, m = cz_clock();
+    *d = 0;
+    switch (S.sel) {
+    case SET_BRIGHT: num(d, S.brightness, 1); break;
+    case SET_CLOCK: if (m < 0) put(d, "--:--", 5); else { d = num(d, m / 60, 2); d = put(d, ":", 1); num(d, m % 60, 2); } break;
+    case SET_TZ: d = put(d, S.tz < 0 ? "UTC" : "UTC+", 4); num(d, S.tz, 1); break;
+    case SET_CITIZEN: put(d, DEFAULT_NAME[S.creature], 10); break;
+    case SET_WIFI: if (!S.ssid[0]) put(d, "NOT SET", 7); else { d = put(d, S.ssid, 12); d = put(d, " ", 1); put(d, wifi[S.wifi_state], 10); } break;
+    case SET_UPDATE:
+        if (S.version[0]) { d = put(d, "V", 1); d = put(d, S.version, 15); d = put(d, " ", 1); }
+        if (S.update[0]) { d = put(d, "NEW ", 4); put(d, S.update, 15); } else put(d, "UP TO DATE", 10);
+        break;
+    case SET_ABOUT:
+        for (i = 0; S.url[i]; i++) if (S.url[i] == '/') slug = S.url + i + 1;
+        if (S.version[0]) { d = put(d, "V", 1); d = put(d, S.version, 15); d = put(d, " ", 1); }
+        put(d, slug, 16);
+        break;
+    default: break;
+    }
+    return S.set_value;
+}
+
 /* Everything the picture depends on that changes with time; setters mark S.stale instead. */
+static int phase(void) {
+    int m = cz_clock();
+    if (m < 0 || m >= 1200 || m < 360) return CZ_PH_NIGHT; /* unknown time renders night */
+    return m < 480 ? CZ_PH_DAWN : m < 1050 ? CZ_PH_DAY : CZ_PH_DUSK;
+}
+
+/* Bits: screen 0-3, hearts 4-7, pose 8-11, Hatch typed 12-19 and rise 20-27 or else the animation state 12-27,
+ * phase 30-31. */
+#define KEY_ANIM 0x0FFFF000u
+#define KEY_POSE 0x00000F00u
+#define KEY_RISE 0x0FF00000u
+static int anim(void) { return cz_anim(S.screen, S.anim_ms, S.screen_ms); }
 static uint32_t view_key(void) {
-    return (uint32_t)S.screen | (uint32_t)S.hearts << 4 | (uint32_t)cz_pose() << 8 |
-           (uint32_t)(S.screen == CZ_S_HATCH ? typed_len() : 0) << 12 |
-           (uint32_t)(S.screen == CZ_S_HATCH ? hatch_y() : 0) << 20 |
-           (uint32_t)breath_dy() << 28;
+    uint32_t k = (uint32_t)phase() << 30 | (uint32_t)S.screen | (uint32_t)S.hearts << 4 | (uint32_t)cz_pose() << 8;
+    if (S.screen == CZ_S_HATCH) return k | (uint32_t)typed_len() << 12 | (uint32_t)hatch_y() << 20;
+    return k | ((uint32_t)anim() << 12 & KEY_ANIM);
 }
 
 /* Home blink: only the pose changed, so redraw just the box where the idle and blink sprites differ. */
@@ -314,26 +451,34 @@ static void clip_blink(void) {
                 if (y < y0) y0 = y;
                 if (y > y1) y1 = y;
             }
-    /* sprite drawn at (56, 44), scale 2 by home() in screens.c; an identical pair clips to nothing */
-    cz_clip(56 + 2 * x0, 44 + 2 * y0, 2 * (x1 - x0 + 1), 2 * (y1 - y0 + 1));
+    /* sprite drawn at (56, 44 + breath 0..2), scale 2 by home() in screens.c; an identical pair clips to nothing */
+    cz_clip(56 + 2 * x0, 44 + 2 * y0, 2 * (x1 - x0 + 1), 2 * (y1 - y0 + 1) + 2);
 }
 
 static void render_if_needed(void) {
     struct cz_view v;
-    uint32_t k = view_key();
-    if (!S.stale && k == S.drawn_key) return;
+    uint32_t k = view_key(), diff = k ^ S.drawn_key;
+    int bx, by, bw, bh;
+    if (!S.stale && !diff) return;
     v.screen = S.screen; v.creature = S.creature; v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
-    v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url;
-    cz_breath_dy = breath_dy();
-    if (!S.stale && S.screen == CZ_S_HOME && (k ^ S.drawn_key) == (uint32_t)(CZ_IDLE ^ CZ_BLINK) << 8) clip_blink();
-    else if (!S.stale && (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK || S.screen == CZ_S_SLEEP) && ((k ^ S.drawn_key) & ~0x30000F00u) == 0)
-        cz_clip(56, 44, 2 * CZ_SPRITE, 2 * CZ_SPRITE + 2); /* only breath and/or pose moved: redraw the sprite box */
-    cz_hatch_y = hatch_y();
-    if (!S.stale && S.screen == CZ_S_HATCH && ((k ^ S.drawn_key) & 0xFFFFF) == 0) {
-        /* only the rise moved: redraw the sprite box from the higher top down to the band (which hides the rest) */
-        int y0 = (int)(S.drawn_key >> 20) < cz_hatch_y ? (int)(S.drawn_key >> 20) : cz_hatch_y;
-        cz_clip(56, y0, 2 * CZ_SPRITE, HATCH_Y_HIDDEN - y0);
+    v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url; v.phase = phase();
+    v.anim = S.screen == CZ_S_HATCH ? 0 : anim();
+    if (S.screen == CZ_S_SETTINGS) {
+        v.set_prev = SET_LABEL[(S.sel + SET_N - 1) % SET_N]; v.set_label = SET_LABEL[S.sel];
+        v.set_next = SET_LABEL[(S.sel + 1) % SET_N]; v.set_value = setting_value();
     }
+    cz_hatch_y = hatch_y();
+    cz_anim_box(S.screen, &bx, &by, &bw, &bh);
+    if (S.stale) {}
+    else if (S.screen == CZ_S_HATCH) {
+        if ((diff & ~KEY_RISE) == 0) {
+            /* only the rise moved: redraw the sprite box from the higher top down to the band (which hides the rest) */
+            int old = (int)(S.drawn_key >> 20 & 0xFF), y0 = old < cz_hatch_y ? old : cz_hatch_y;
+            cz_clip(56, y0, 2 * CZ_SPRITE, HATCH_Y_HIDDEN - y0);
+        }
+    }
+    else if (S.screen == CZ_S_HOME && diff == (uint32_t)(CZ_IDLE ^ CZ_BLINK) << 8) clip_blink();
+    else if (bw && (diff & ~(KEY_ANIM | KEY_POSE)) == 0) cz_clip(bx, by, bw, bh); /* only animation moved */
     cz_draw(&v);
     cz_clip(0, 0, CZ_W, CZ_H);
     cz_stats[CZ_STAT_FRAMES]++;

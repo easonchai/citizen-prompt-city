@@ -32,7 +32,15 @@ button label is clipped. (Use the iframe, not `--window-size=400`: desktop Chrom
   three.js 0.160.0 loads from cdnjs (OrbitControls from jsDelivr) on first use; the 2D sim does not need it.
 - URL parameters: `?scenario=desk|event|forgotten` starts that preset, `?speed=N` sets the speed (after the preset), `?view=3d`
   opens the 3D view, e.g. http://localhost:8787/?view=3d&scenario=event&speed=60.
-- Gesture buttons inject raw touch sequences: Tap, Swipe, Hold, Double tap (cycles brightness 100/40/10).
+- Gesture buttons inject raw touch sequences: Tap, Swipe, Hold, Double tap (opens Settings: tap = next item, swipe right = change,
+  swipe left = back, hold = exit).
+- Clock: time of day (HH:MM, calls `cz_set_clock`), timezone (`cz_set_timezone`), and "use my computer's clock", which re-sets the
+  badge clock from `Date` every simulated minute. Between sets the core advances its own clock from `cz_tick`. Scenarios set it:
+  Desk day 09:00, Event day 10:00, Forgotten 20:00.
+- Host requests: `cz_host_request()` is polled every simulated frame and the request name shows in the status line.
+  PORTAL = "portal would start (simulated)"; CHECK_UPDATE = after 2 simulated s `cz_set_update("1.1.1")`; INSTALL_UPDATE =
+  "would reboot into 1.1.1", then version 1.1.1 and no update pending. Version 1.1.0 and the WiFi state (`PromptKL`, 2 when
+  connected else 0) are fed to the core on boot, after every re-init, and when the WiFi toggle changes.
 - Time: Pause, Step 1 s, Jump 1 h, speed 1x to 3600x. The core is ticked at 30 Hz of simulated time, like the firmware loop.
 - Content: creature, name, prompt, QR url, brightness, send message now, check in, save, reset, wake from deep sleep with slept seconds.
 - Host sleep: Deep (F4: save, core off, a touch re-inits from the blob with the slept seconds; the waking touch is consumed),
