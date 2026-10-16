@@ -109,3 +109,41 @@ Everything the host may call is in `citizen.h`, all prefixed `cz_`. The Makefile
 | `uint32_t cz_hunger_ms(void)` | Milliseconds since the last feed, capped at 7 days. |
 | `uint8_t *cz_scratch(void)` | A 256-byte buffer inside the core for hosts that cannot pass pointers (wasm): write a NUL-terminated string there and pass it to a setter. |
 | `const uint8_t *cz_sprite(int creature, int pose)` | The 64x64 palette-index sprite, 0 transparent. Generated into `sprites.c` by `tools/pack_sprites.py`. |
+
+## State machine
+
+Ten screens, `enum cz_screen`. Home and Sulk are the two resting screens; which one you land on is decided by `sulking()`: hearts at 1 or below, or 6 h since the last feed. Every other screen returns to that base screen when it is done.
+
+```
+                 prompt typed + 2 s hold
+   HATCH ------------------------------------> HOME <----------> SULK
+   (ignores touch,                              ^  (hearts <= 1 or 6 h unfed, re-evaluated every tick)
+    message, check-in)                          |
+                                                |  from HOME or SULK:
+   tap ..................... FEED (3 s) --------+
+   swipe, any direction .... PLAY (3 s) --------+
+   hold 1 s ................ QR (30 s or tap) --+
+   double tap .............. SETTINGS ----------+  (hold, double tap, Exit row, 20 s idle)
+   30 s idle ............... SLEEP (tap) -------+
+   cz_message() ............ TALK (8 s) --------+  from any screen except HATCH
+   cz_checkin() ............ CHECKIN (4 s) -----+  from any screen except HATCH
+```
+
+| Screen | Enters when | Leaves when |
+|---|---|---|
+| `CZ_S_HATCH` | Fresh pet (no valid save blob). | The prompt has typed out at 60 ms per character and the 2 s rise has ended. Sets `hatched`. Taps, messages and check-ins are ignored here. |
+| `CZ_S_HOME` | Base screen while not sulking. | Any gesture or event above; 30 s without touch goes to Sleep (never in portrait mode). |
+| `CZ_S_SULK` | Base screen while sulking. Same gestures as Home. | A feed or play that lifts hearts above 1 and hunger under 6 h switches back to Home on the next tick. |
+| `CZ_S_FEED` | Tap on Home or Sulk. +1 heart (max 4), hunger reset. | 3 s, or a tap. |
+| `CZ_S_PLAY` | Swipe on Home or Sulk. +1 heart only if 30 min have passed since the last rewarded play. | 3 s, or a tap. |
+| `CZ_S_TALK` | `cz_message()`. | 8 s, or a tap. |
+| `CZ_S_QR` | Finger held still for 1 s on Home or Sulk. Fires while the finger is still down. | 30 s, or a tap. |
+| `CZ_S_CHECKIN` | `cz_checkin()`. | 4 s, or a tap. |
+| `CZ_S_SLEEP` | 30 s idle on Home or Sulk. `cz_wants_sleep()` is 1 here. | A tap. The host usually deep sleeps instead and re-inits on wake. |
+| `CZ_S_SETTINGS` | Double tap on Home or Sulk (a first tap that fed the pet is undone). | Hold, double tap, the Exit row, or 20 s idle. |
+
+A tap on any event screen (Feed, Play, Talk, QR, Check-in, Sleep) dismisses it to the base screen. Talk and Check-in interrupt whatever is showing, Settings and Sleep included.
+
+### Rendering
+
+Nothing is drawn inside `cz_tick`. When the host calls `cz_framebuffer`, `cz_dirty` or `cz_dirty_rows`, the core packs everything the picture depends on into a 32-bit view key (screen, hearts, pose, animation step or Hatch progress, sky phase) and redraws only if the key differs from the last drawn one or a setter marked the state stale. When only the animation changed it clips the redraw to the screen's animation box from `cz_anim_box`; a Home blink clips to the pixels where the idle and blink sprites differ. The firmware then pushes only the dirty row span.
