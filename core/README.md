@@ -36,3 +36,76 @@ Facts in this document come from `citizen.h`, `citizen.c`, `screens.c`, `gfx.c` 
  qrcodegen.c  Nayuki's QR encoder, used by the QR screen
  libc_shim.c  memset/memcpy for the wasm build only (CZ_FREESTANDING)
 ```
+
+## Public API
+
+Everything the host may call is in `citizen.h`, all prefixed `cz_`. The Makefile exports exactly this list to wasm. `now_ms` is the host's monotonic clock in milliseconds; it may wrap.
+
+### Lifecycle
+
+| Signature | What it does |
+|---|---|
+| `void cz_init(uint32_t seed, const uint8_t *saved, int saved_len, uint32_t slept_seconds)` | Resets the one instance. With a valid save blob the pet resumes and `slept_seconds` of wall-clock time are applied to hunger, play and the clock (capped at 7 days for the timers, exact modulo a day for the clock). With no blob or a bad one, `seed % 3` picks the creature, hearts start at 3, play is available at once and the screen is Hatch. |
+| `int cz_save(uint8_t *out, int cap)` | Writes the 64-byte save blob. Returns `CZ_SAVE_SIZE` (64), or 0 if `out` is NULL or `cap` is too small. |
+
+### Time and input
+
+| Signature | What it does |
+|---|---|
+| `void cz_tick(uint32_t now_ms)` | Advances timers, hearts, screen timeouts, the hold gesture and the pending Settings tap. Call it every 16 to 50 ms. Rendering happens lazily when the host reads the framebuffer, not here. |
+| `void cz_touch(int kind, int x, int y, uint32_t now_ms)` | Raw touch: `CZ_TOUCH_DOWN`, `CZ_TOUCH_MOVE` or `CZ_TOUCH_UP` at panel coordinates. The core detects tap, double tap, swipe and hold itself. Also advances time like `cz_tick`. Ignored in portrait mode. |
+
+### Content the host sets
+
+| Signature | What it does |
+|---|---|
+| `void cz_set_creature(int creature)` | 0 tapir, 1 hornbill, 2 tiger. Resets the name to the creature's default (TENUK, KENYALANG, HARIMAU); call `cz_set_name` after it for a custom name. Out-of-range values are ignored. |
+| `void cz_set_portrait(int on)` | Web portrait: hatched, 4 hearts, Home with no hearts or action icons, touch ignored, never sleeps. |
+| `void cz_set_name(const char *name)` | Up to 10 bytes, shown in gold under the pet. Not uppercased by the core; the font draws lowercase as uppercase. |
+| `void cz_set_prompt(const char *prompt)` | Up to 96 bytes, typed out on Hatch at 60 ms per character. |
+| `void cz_set_qr_url(const char *url)` | Up to 128 bytes, encoded on the QR screen. Default is the deployed site plus `/c/<lowercase name>`. |
+| `void cz_message(const char *text)` | Up to 64 bytes. Opens Talk for 8 s from any screen except Hatch. |
+| `void cz_checkin(const char *city)` | Up to 16 bytes. Opens Check-in for 4 s from any screen except Hatch. |
+
+### Output
+
+| Signature | What it does |
+|---|---|
+| `const uint8_t *cz_framebuffer(void)` | Renders if anything changed, then returns the 240x240 palette-index buffer. |
+| `const uint16_t *cz_palette(void)` | The 15 RGB565 palette entries. |
+| `int cz_dirty(void)` | 1 if the framebuffer changed since the last `cz_dirty` or `cz_dirty_rows` call. Renders first. |
+| `int cz_dirty_rows(int *y0, int *y1)` | Like `cz_dirty`, and fills the inclusive row span touched since the last call. The firmware pushes only those rows. |
+| `int cz_wants_sleep(void)` | 1 while the Sleep screen is showing. The host may deep sleep, then wake on touch and call `cz_init` with the blob. |
+| `uint32_t cz_stat(int which)` | Monotonic counters since init: `CZ_STAT_FRAMES`, `CZ_STAT_PIXELS_FILLED`, `CZ_STAT_SPRITE_PIXELS`, `CZ_STAT_TEXT_GLYPHS`. |
+
+### Brightness, clock, timezone
+
+| Signature | What it does |
+|---|---|
+| `int cz_brightness(void)` | 100, 40 or 10. Chosen on the Settings wheel; the host drives the backlight from it. |
+| `void cz_set_brightness(int pct)` | Accepts only 100, 40 or 10. Persisted in the save blob. |
+| `void cz_set_clock(int minute_of_day)` | 0..1439 local minutes since midnight; -1 means unknown. Values of 1440 or more are ignored. Drives the day and night sky and the Clock row. Persisted. |
+| `int cz_clock(void)` | Current local minute of day, advancing with ticks, or -1 when unknown. |
+| `int cz_timezone(void)` | UTC offset in hours, default 8. |
+| `void cz_set_timezone(int hours)` | -12..14, anything else ignored. Persisted. |
+
+### Settings values fed by the host
+
+| Signature | What it does |
+|---|---|
+| `void cz_set_version(const char *running)` | Up to 15 bytes, e.g. "1.1.0". Shown on the Update and About rows. |
+| `void cz_set_update(const char *available)` | A newer version string, or "" or NULL for up to date. Changes what the Update row does when activated. |
+| `void cz_set_wifi(const char *ssid, int state)` | SSID up to 32 bytes plus `CZ_WIFI_OFF`, `CZ_WIFI_CONNECTING`, `CZ_WIFI_OK` or `CZ_WIFI_FAIL`. Shown on the WiFi row. |
+| `int cz_host_request(void)` | Pops one pending request: `CZ_REQ_PORTAL`, `CZ_REQ_CHECK_UPDATE`, `CZ_REQ_INSTALL_UPDATE` or `CZ_REQ_FACTORY_RESET`, lowest first; `CZ_REQ_NONE` when empty. Nothing in the core raises `CZ_REQ_FACTORY_RESET` today. |
+
+### Introspection
+
+| Signature | What it does |
+|---|---|
+| `int cz_screen(void)` | Current `enum cz_screen`. |
+| `int cz_hearts(void)` | 0..4. |
+| `int cz_creature(void)` | Current `enum cz_creature`. |
+| `int cz_pose(void)` | The sprite pose the current screen shows, including the Home blink. |
+| `uint32_t cz_hunger_ms(void)` | Milliseconds since the last feed, capped at 7 days. |
+| `uint8_t *cz_scratch(void)` | A 256-byte buffer inside the core for hosts that cannot pass pointers (wasm): write a NUL-terminated string there and pass it to a setter. |
+| `const uint8_t *cz_sprite(int creature, int pose)` | The 64x64 palette-index sprite, 0 transparent. Generated into `sprites.c` by `tools/pack_sprites.py`. |
