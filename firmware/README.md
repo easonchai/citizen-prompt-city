@@ -147,3 +147,17 @@ The badge prints one JSON line per second on serial, and once a minute while awa
 ```
 
 The badge reads `version` and `url` only. It checks after the first state poll of every wake and then at most hourly, compares `version` to `CZ_VERSION` as three-part numeric semver, and tells the core (`cz_set_update`) only when the published build is newer. Install happens three ways: automatically, once per wake, when a newer build is known, prefs `autoupd` is 1 (default) and the badge has sat untouched on Home or Sulk for 10 s; from the Settings Update row; or the serial `update` command. `install_update` saves the pet, shows `UPDATING...`, then streams the image into the idle app slot with `HTTPUpdate` over a `WiFiClientSecure` that skips certificate checks, following redirects, and reboots on success. On failure it shows `UPDATE FAILED`. `sha256` from the manifest is not verified by the badge; the ESP-IDF image header and appended hash are still checked before the slot switch.
+
+## Power behaviour
+
+The main loop runs one pass every 16 ms: serial, touch, `cz_tick`, WiFi housekeeping, host requests from Settings, persist changed settings, push dirty rows, backlight, telemetry, periodic save. If a pass overruns it does not try to catch up.
+
+Saves: `save_now` writes the core's 64-byte blob to prefs `save` when hearts change, every 5 minutes, before sleep, and on creature or brightness changes. Identical blobs are not rewritten, to spare the flash.
+
+Sleep: the core asks to sleep (`cz_wants_sleep`) after 30 s idle on Home or Sulk. The firmware honours it only after this wake's first sync attempt has finished, so an idle badge still syncs once per wake. `go_to_sleep` then saves, stamps the RTC clock in `RTC_DATA_ATTR` memory, turns the backlight off, puts the panel to sleep and enters deep sleep (about 5 uA) with wake on the touch INT line (GPIO 0) going low. The ESP32-C3 can only wake deep sleep on GPIO 0..5, so BOOT (GPIO 9) cannot wake it; RESET does.
+
+Wake: deep sleep reboots the chip. `setup` diffs the RTC clock against the stamp to get slept seconds (the RTC timer keeps running through deep sleep but not through power loss, where it passes 0), loads the blob with `cz_init`, re-applies the host-owned content (creature, name, prompt, timezone, version, clock from SNTP if still valid), pushes the first full frame before turning the backlight on, and only then starts WiFi. USB CDC drops while asleep and comes back on wake.
+
+Fallback: build with `-DCZ_LIGHT_SLEEP_FALLBACK` if level wake from deep sleep proves unreliable. Light sleep (about 0.13 mA, RAM kept) wakes on touch INT low, BOOT low, or a 2 s timer; on a timer wake it polls the touch controller and goes back to sleep if nothing is pressed, then reloads the pet without a reboot.
+
+Backlight: `cz_brightness` (100, 40 or 10) maps to PWM at 44.1 kHz on GPIO 3; it is applied only when it changes.
