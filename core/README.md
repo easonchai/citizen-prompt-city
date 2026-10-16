@@ -186,3 +186,27 @@ All from `citizen.c` and `screens.c`. Timers are driven by the `now_ms` the host
 | Feed crumbs | 750 ms per crumb | 3, 2, 1, 0 crumbs over the 3 s. |
 | Sulk drop | every 2 s | Sweat drop slides 4 steps down the head. |
 | Clock | real time | Minute of day advances with ticks, wraps at midnight. Sky phase: night before 06:00 and from 20:00, dawn until 08:00, day until 17:30, then dusk. Unknown clock renders night. |
+
+## Palette
+
+Fifteen entries, `enum cz_color` in `citizen.h`, RGB in `cz_pal_rgb` and RGB565 in `cz_pal565` in `gfx.c`. Index 0 is sprite transparency and is never written to the framebuffer; the tests fail on any pixel that is 0.
+
+| Index | Name | Hex | Used for |
+|---|---|---|---|
+| 0 | `CZ_C_TRANSPARENT` | `#000000` | sprite transparency only |
+| 1 | `CZ_C_NAVY` | `#141c3a` | night sky, ground dots |
+| 2 | `CZ_C_DUSK` | `#1e2a58` | night horizon band, dawn sky, dusk band, Talk bubble |
+| 3 | `CZ_C_DEEP` | `#0a0e1f` | city, ground, Hatch and Settings background, dither target, QR modules |
+| 4 | `CZ_C_INK` | `#f6f1e4` | text, outlines, stars, QR panel |
+| 5 | `CZ_C_GOLD` | `#f0b840` | lit windows, horizon, banner, event text, selected Settings row |
+| 6 | `CZ_C_CORAL` | `#f06a5a` | filled hearts, Check-in confetti |
+| 7 | `CZ_C_TEAL` | `#2bb8a8` | secondary, Sulk sweat drop |
+| 8 | `CZ_C_CHAR` | `#2a2a2e` | sprite only |
+| 9 | `CZ_C_PINK` | `#f4a3b5` | sprite only |
+| 10 | `CZ_C_PALE` | `#ffe38a` | sprite only |
+| 11 | `CZ_C_DAYSKY` | `#5aa9e6` | day sky |
+| 12 | `CZ_C_DAYHORIZON` | `#cfe8ff` | day horizon band |
+| 13 | `CZ_C_ROSE` | `#e07a8a` | dawn band, dusk sky |
+| 14 | `CZ_C_CLOUD` | `#eef3ff` | day clouds |
+
+The same table lives in `tools/pack_sprites.py`, which quantises the PNG sprites to these indices.
