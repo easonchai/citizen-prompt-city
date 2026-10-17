@@ -58,16 +58,15 @@ function base() {
   }
   const body = k.cylinder(0, 0, baseR, -baseH, baseH, P, 96, 1.6);
   const ticks = k.radialTicks(0, 0, baseR - 1.5, 72, 6, 0, [2.4, 5.2], P);
-  const inner = [L(k.ring(0, 0, M.platterR + 3.5, 0, P, 96), { tone: "faint" }), L(ticks.minor ?? ticks, { tone: "lo" }), ticks.major ? L(ticks.major, { tone: "mid" }) : ""].join("");
-  const svg = S(body, { tone: "mid", inner }) ;
-  put({ name: "stand.base", layer: "back", at: [0, 0, -baseH], bias: 4, svg, shapes: [A.cylinder(0, 0, baseR, -baseH, baseH, { ground: true })] });
-  // the index: a brass wedge on the rim, facing the reader
+  // a degree scale: ticks run from the outer ring to the ring their length ends on
+  const scale = [baseR - 1.5, baseR - 3.9, baseR - 6.7].map((r, i) => L(k.ring(0, 0, r, 0, P, 128), { tone: i ? "faint" : "lo" })).join("");
+  const inner = [scale, L(ticks.minor ?? ticks, { tone: "lo" }), ticks.major ? L(ticks.major, { tone: "mid" }) : ""].join("");
+  // the index: a brass wedge inlaid flush in the top of the base, facing the reader
   const ia = AZ * D2R;
-  const c = Math.cos(ia);
-  const s = Math.sin(ia);
-  const wedge = [[M.platterR + 4, -0.8], [M.platterR + 4, 0.8], [baseR - 3, 3.4], [baseR - 3, -3.4]].map(([r, t]) => [c * r - s * t, s * r + c * t]);
-  // inlaid flush in the base top, so it never rises into the turntable's sweep
-  put({ name: "stand.index", layer: "back", at: [c * (baseR - 6), s * (baseR - 6), 0], svg: `<g data-mat="brass">${S(k.extrude(wedge, -1, 1, P), { tone: "hi", flat: true })}</g>`, shapes: [A.extruded(wedge, -1, 1)] });
+  const wedge = [[M.platterR + 4, -0.8], [M.platterR + 4, 0.8], [baseR - 3, 3.4], [baseR - 3, -3.4]].map(([r, t]) => [Math.cos(ia) * r - Math.sin(ia) * t, Math.sin(ia) * r + Math.cos(ia) * t]);
+  const index = `<g data-mat="brass"><path class="iso-top" d="${k.onTop(wedge, 0, P, true)}"/><path class="iso-line iso-edge" data-tone="mid" d="${k.onTop(wedge, 0, P, true)}"/></g>`;
+  const svg = S(body, { tone: "mid", inner: inner + index });
+  put({ name: "stand.base", layer: "back", at: [0, 0, -baseH], bias: 4, svg, shapes: [A.cylinder(0, 0, baseR, -baseH, baseH, { ground: true })] });
 }
 
 // ---- live: the turntable and everything on it --------------------------------------------------------------------------
@@ -95,15 +94,15 @@ function ring(id, name, { s0, s1, rIn, rOut, sectors, facets = 5, material, tone
     }
     const ri = rIn / Math.cos((a1 - a0) / 2);
     pts.push([ri * Math.cos(a1), ri * Math.sin(a1)], [ri * Math.cos(a0), ri * Math.sin(a0)]);
-    const spans = spanS ? spanS(j, a0, a1) : [[s0, s1]];
+    // spans along the axis; a span edge listed in `joins` meets the next span flush and is not stroked
+    const { spans, joins = [] } = spanS ? spanS(j, a0, a1) : { spans: [[s0, s1]] };
     for (const [i, [t0, t1]] of spans.entries()) {
-      const part = T.prism({ name: `${name}.${String(j).padStart(2, "0")}${spans.length > 1 ? "abc"[i] : ""}`, group: groupOf(id), layer, F: FB, polygon: pts, s0: t0, s1: t1, tone, crease: "none", material });
+      const part = T.prism({ name: `${name}.${String(j).padStart(2, "0")}${spans.length > 1 ? "abcdef"[i] : ""}`, group: groupOf(id), layer, F: FB, polygon: pts, s0: t0, s1: t1, tone, crease: "none", material });
       const cut = (a) => {
         const n = G.add3(G.mul3(UP, -Math.sin(a)), G.mul3(V, Math.cos(a)));
         return { n, d: G.dot3(n, B0) };
       };
-      part.spec.cuts = [cut(a0), cut(a1)];
-      part.hints.unshift(cut(a0).n, cut(a1).n);
+      part.spec.cuts = [cut(a0), cut(a1), ...joins.filter((t) => t === t0 || t === t1).map((t) => ({ n: N, d: G.dot3(N, B0) + t }))];
       // chamfer lines on the face: each sector carries its own arc, so the paint order stays the sector's
       for (const { s, r, tone: t = "faint" } of arcs ?? []) {
         if (s !== t0 && s !== t1) continue;
@@ -125,7 +124,7 @@ const ang = (deg) => deg * D2R;
 const polar = (r, deg) => [r * Math.cos(ang(deg)), r * Math.sin(ang(deg))];
 
 function turntable() {
-  T.round({ name: "spin.platter", group: spin, layer, F: VERT(0, 0), s0: 0, s1: M.platterH, r: M.platterR, tone: "mid", crease: "lo", material: "steel", details: { ribs: { s0: 0.8, s1: M.platterH - 0.8, count: 220, seams: true, tone: "lo", fade: [0.08, 0.5] }, rings: [M.platterR - 6, 104, 60].map((r, i) => ({ at: [M.platterH, 0, 0], normal: [0, 0, 1], r, tone: i ? "faint" : "lo" })) } });
+  T.round({ name: "spin.platter", group: spin, layer, F: VERT(0, 0), s0: 0, s1: M.platterH, r: M.platterR, tone: "mid", crease: "lo", material: "steel", details: { ribs: { s0: 0, s1: M.platterH, count: 220, tone: "lo", fade: [0.08, 0.5] }, rings: [M.platterR - 6, 104, 60].map((r, i) => ({ at: [M.platterH, 0, 0], normal: [0, 0, 1], r, tone: i ? "faint" : "lo" })) } });
   // cradle: two wedges flush with the case facets at ±135° from up
   for (const side of [-1, 1]) {
     const deg = side * 135;
@@ -166,7 +165,12 @@ function backShell() {
     s0: 0, s1: M.wallTop, rIn: M.wallIn, rOut: M.caseR, sectors: 32, material: "rubber",
     // the two bottom sectors carry the USB-C window: wall behind it and in front of it, open in between
     arcs: [{ s: 0, r: M.caseR - 2.2 }],
-    spanS: (j, a0, a1) => (Math.abs((a0 + a1) / 2 - Math.PI) < 17 * D2R ? [[0, usb.s0 - 0.6], [usb.s1 + 0.6, M.wallTop]] : [[0, M.wallTop]]),
+    // three shallow rings: deep sectors seen obliquely overlap their non-neighbours and the painter's order cycles.
+    // The three sectors under the board's USB-C carry its window instead of the first join.
+    spanS: (j, a0, a1) =>
+      Math.abs((a0 + a1) / 2 - Math.PI) < 17 * D2R
+        ? { spans: [[0, usb.s0 - 0.6], [usb.s1 + 0.6, 30], [30, M.wallTop]], joins: [30] }
+        : { spans: [[0, 15], [15, 30], [30, M.wallTop]], joins: [15, 30] },
   });
   const plate = T.round({ name: "back.plate", group: spin, layer, F: FB, s0: 0, s1: M.plateT, r: M.wallIn, tone: "hi", material: "rubber", details: { rings: M.buttons.map((b) => ({ at: [0, b.x, b.y], normal: G.mul3(N, -1), r: 5.6, tone: "lo" })) } });
   // the battery cutout over the JST header: an opening in the back, drawn on the outside face
@@ -339,9 +343,9 @@ const body = k.plateHtml({
   hint: "Drag to turn · hover to take apart",
   readout: "assembled · 0°",
   keys: [],
-  caption: `<span class="cz-parts">${PARTS}</span>The DIYMORE ESP32-2424S012C in its case, as each speaker wears it. Readouts are the verified board table; proportions are drawn, not measured.`,
+  caption: "The DIYMORE ESP32-2424S012C in its case, as each speaker wears it. Readouts are the verified board table; proportions are drawn, not measured.",
   body: `<style>${CSS}</style>${stage}`,
-});
+}).replace('<figcaption class="iso-legend">', `<figcaption class="iso-legend"><span class="cz-parts">${PARTS}</span>`);
 const page = k.pageHtml({ title: "Citizen badge", theme, body, script: turnScript() + (verify ? `window.__isoVerify = ${JSON.stringify(out.verify)};\n` : "") + LIVE, width: 720 });
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const name = `badge-3d${verify ? "-verify" : ""}${theme === "light" ? "-light" : ""}.html`;

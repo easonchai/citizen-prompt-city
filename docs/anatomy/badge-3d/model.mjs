@@ -24,7 +24,7 @@ export const M = {
   pcb: { s0: 20, s1: 26, r: 78 },
   esp: { x: 26, y: 4, w: 50, d: 53, h: 10 }, // ESP32-C3-MINI-1U: 13.2 x 12.5 mm module under a shield
   usb: { s0: 7, s1: 20, w: 36, deep: 29 }, // USB-C receptacle, 9 x 3.2 mm mouth
-  usbR: 79,
+  usbR: 76, // its mouth stays inside the wall's inner chords, so the board slides out past the window
   jst: { x: -22, y: -50, w: 14, d: 22, h: 12 },
   buttons: [{ id: "boot", x: -40, y: -18 }, { id: "reset", x: -40, y: 18 }],
   switchTop: 12,
