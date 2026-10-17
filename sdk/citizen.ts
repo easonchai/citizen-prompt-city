@@ -7,6 +7,7 @@ export type State = {
   msg: string; // first 64 chars of the latest assistant reply, "" if none
   checkin: string; // city of the latest check-in, "" if none
   name: string; // the pet's name, "" on 404 / DB failure
+  skies: string; // granted sky unlocks, comma-separated in the order kl,sg,tyo (e.g. "kl,sg"), "" if none
   updatedAt: string | null; // ISO time of the later of msg and checkin
   now: string; // server time, ISO
   error?: string; // "1 poll per 10 s" on 429
@@ -32,7 +33,7 @@ async function json<T>(res: Response): Promise<T> {
   return body as T;
 }
 
-/** The badge's latest reply, check-in and name. Rate limited to 1 call per 10 s per slug. */
+/** The badge's latest reply, check-in and name. Rate limited to 1 call per 10 s per slug from each address. */
 export function getState(base: string, slug: string): Promise<State> {
   return fetch(url(base, `${c(slug)}/state`), { cache: "no-store" }).then((r) => json<State>(r));
 }

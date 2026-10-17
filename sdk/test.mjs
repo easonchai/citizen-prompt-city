@@ -7,11 +7,12 @@ const base = process.argv[2] ?? "http://localhost:3110";
 const slug = process.argv[3] ?? "tenuk-d2e8";
 
 const state = await getState(base, slug);
-assert.deepEqual(Object.keys(state).sort(), ["checkin", "msg", "name", "now", "updatedAt"], "state keys");
+assert.deepEqual(Object.keys(state).sort(), ["checkin", "msg", "name", "now", "skies", "updatedAt"], "state keys");
 assert.equal(typeof state.msg, "string");
 assert.ok(state.msg.length <= 64, "msg is at most 64 chars");
 assert.equal(typeof state.checkin, "string");
 assert.equal(typeof state.name, "string");
+assert.match(state.skies, /^((kl|sg|tyo)(,(kl|sg|tyo))*)?$/, "skies is a flat comma-separated string");
 assert.ok(state.updatedAt === null || !Number.isNaN(Date.parse(state.updatedAt)), "updatedAt is null or ISO");
 assert.ok(!Number.isNaN(Date.parse(state.now)), "now is ISO");
 console.log("state ok", state);
