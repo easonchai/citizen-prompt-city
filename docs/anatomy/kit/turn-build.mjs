@@ -1241,7 +1241,9 @@ function build(T, { statics = [], verify = false, poses = null, strict = true, f
   data.parts.forEach((p, index) => {
     if (p.kind === "fixed") p.cloud = clouds[index].flat().map(r4);
   });
-  const packed = { ...pack({ ...data, parts: [] }), parts: pack3(data.parts) };
+  // Citizen badge: parts at 4 decimals, not 3. Tilted frames (a = [0.999, 0.035, 0]) drift ~0.1 px from their own
+  // build-time planes at 3 decimals, and flush sectors swap while overlapping 2-3 px².
+  const packed = { ...pack({ ...data, parts: [] }), parts: pack(data.parts) };
   scene = TURN.prepare(packed, { unit: T.scale });
   const cams = TURN.cams(scene, values);
   const frames = scene.runs.map((run) => TURN.emit(run, run.group >= 0 ? cams[run.group] : cams.world, TURN.frame(run)));

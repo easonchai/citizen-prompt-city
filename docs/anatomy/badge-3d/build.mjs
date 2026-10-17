@@ -103,6 +103,8 @@ function ring(id, name, { s0, s1, rIn, rOut, sectors, facets = 5, material, tone
         return { n, d: G.dot3(n, B0) };
       };
       part.spec.cuts = [cut(a0), cut(a1), ...joins.filter((t) => t === t0 || t === t1).map((t) => ({ n: N, d: G.dot3(N, B0) + t }))];
+      // the shared faces are the planes that separate flush neighbours: try them first
+      part.hints.unshift(cut(a0).n, cut(a1).n, N);
       // chamfer lines on the face: each sector carries its own arc, so the paint order stays the sector's
       for (const { s, r, tone: t = "faint" } of arcs ?? []) {
         if (s !== t0 && s !== t1) continue;
@@ -125,38 +127,15 @@ const polar = (r, deg) => [r * Math.cos(ang(deg)), r * Math.sin(ang(deg))];
 
 function turntable() {
   T.round({ name: "spin.platter", group: spin, layer, F: VERT(0, 0), s0: 0, s1: M.platterH, r: M.platterR, tone: "mid", crease: "lo", material: "steel", details: { ribs: { s0: 0, s1: M.platterH, count: 220, tone: "lo", fade: [0.08, 0.5] }, rings: [M.platterR - 6, 104, 60].map((r, i) => ({ at: [M.platterH, 0, 0], normal: [0, 0, 1], r, tone: i ? "faint" : "lo" })) } });
-  // cradle: two wedges flush with the case facets at ±135° from up
-  for (const side of [-1, 1]) {
-    const deg = side * 135;
-    const n = [Math.cos(ang(deg)), Math.sin(ang(deg))];
-    const t = [-n[1], n[0]];
-    const p = [n[0] * M.caseR, n[1] * M.caseR];
-    const xPl = M.platterH - M.cz; // platter top in badge x
-    const A1 = [p[0] + t[0] * 11, p[1] + t[1] * 11];
-    const A2 = [p[0] - t[0] * 11, p[1] - t[1] * 11];
-    const far = side * Math.max(Math.abs(A1[1]), Math.abs(A2[1])) + side * 9;
-    const poly = [A1, A2, [A2[1] * side > A1[1] * side ? A2[0] : A2[0], A2[1]], [xPl, A2[1]], [xPl, far], [A1[0], far]];
-    const clean = convex(poly);
-    T.prism({ name: `spin.cradle.${side > 0 ? "r" : "l"}`, group: spin, layer, F: FB, polygon: clean, s0: M.cradleS[0], s1: M.cradleS[1], tone: "mid", crease: "lo", bevel: 0.6, material: "gunmetal", details: { dots: [0.3, 0.7].map((f) => ({ at: [M.cradleS[1], xPl + 8, A2[1] + (far - A2[1]) * f], normal: N, size: 0.5, tone: "hi" })), rings: [0.3, 0.7].map((f) => ({ at: [M.cradleS[1], xPl + 8, A2[1] + (far - A2[1]) * f], normal: N, r: 1.6, tone: "lo" })) } });
-  }
+  // the stand: a block under the case (flush with its bottom facet, clear of the USB-C window) and a back rest
+  // flush with the back face below the pin. Both touch only the back shell, which never moves.
+  const xPl = M.platterH - M.cz; // platter top in badge x
+  const block = (name, x1, t0, t1, w) => T.prism({ name, group: spin, layer, F: FB, polygon: [[xPl, -w / 2], [x1, -w / 2], [x1, w / 2], [xPl, w / 2]], s0: t0, s1: t1, tone: "mid", crease: "lo", bevel: 0.6, material: "gunmetal",
+    details: { dots: [-1, 1].map((side) => ({ at: [t1, xPl + 5, (side * w) / 3], normal: N, size: 0.5, tone: "hi" })), rings: [-1, 1].map((side) => ({ at: [t1, xPl + 5, (side * w) / 3], normal: N, r: 1.6, tone: "lo" })) } });
+  block("spin.stand.seat", -M.caseR, M.cradleS[0], M.cradleS[1], 40);
+  block("spin.stand.rest", -58, -12, 0, 56);
 }
 
-// gift-wrap hull of 2D points (the wedge outline, in order)
-function convex(points) {
-  const p = points.map((q) => q.slice()).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-  const lo = [];
-  for (const q of p) {
-    while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 1e-9) lo.pop();
-    lo.push(q);
-  }
-  const hi = [];
-  for (const q of p.reverse()) {
-    while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], q) <= 1e-9) hi.pop();
-    hi.push(q);
-  }
-  return lo.slice(0, -1).concat(hi.slice(0, -1));
-}
 
 function backShell() {
   const id = "back";
@@ -165,12 +144,12 @@ function backShell() {
     s0: 0, s1: M.wallTop, rIn: M.wallIn, rOut: M.caseR, sectors: 32, material: "rubber",
     // the two bottom sectors carry the USB-C window: wall behind it and in front of it, open in between
     arcs: [{ s: 0, r: M.caseR - 2.2 }],
-    // three shallow rings: deep sectors seen obliquely overlap their non-neighbours and the painter's order cycles.
+    // two shallow rings: deep sectors seen obliquely overlap their non-neighbours and the painter's order cycles.
     // The three sectors under the board's USB-C carry its window instead of the first join.
     spanS: (j, a0, a1) =>
       Math.abs((a0 + a1) / 2 - Math.PI) < 17 * D2R
-        ? { spans: [[0, usb.s0 - 0.6], [usb.s1 + 0.6, 30], [30, M.wallTop]], joins: [30] }
-        : { spans: [[0, 15], [15, 30], [30, M.wallTop]], joins: [15, 30] },
+        ? { spans: [[0, usb.s0 - 0.6], [usb.s1 + 0.6, 22], [22, M.wallTop]], joins: [22] }
+        : { spans: [[0, 22], [22, M.wallTop]], joins: [22] },
   });
   const plate = T.round({ name: "back.plate", group: spin, layer, F: FB, s0: 0, s1: M.plateT, r: M.wallIn, tone: "hi", material: "rubber", details: { rings: M.buttons.map((b) => ({ at: [0, b.x, b.y], normal: G.mul3(N, -1), r: 5.6, tone: "lo" })) } });
   // the battery cutout over the JST header: an opening in the back, drawn on the outside face

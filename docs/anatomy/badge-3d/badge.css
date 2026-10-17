@@ -1,7 +1,6 @@
 .cz-stage{touch-action:pan-y;cursor:grab;outline:none;border-radius:8px}
 .cz-stage:focus-visible{outline:1px solid var(--anatomy-muted);outline-offset:6px}
 .cz-stage[data-drag]{cursor:grabbing}
-.cz-stage .iso-live [data-name]{transition:opacity .25s ease}
 .cz-stage[data-focus] .iso-live [data-name]:not([data-on]):not([data-name^="spin."]){opacity:.22}
 .cz-pixels{image-rendering:pixelated}
 /* glass and touch film are clear: their fills let the panel's picture through */

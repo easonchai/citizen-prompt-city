@@ -19,7 +19,7 @@ export const M = {
   azimuth, elevation, N, UP, V, B0, cz,
   baseR: 140, baseH: 14, footH: 5, platterR: 128, platterH,
   caseR, wallIn: 80, wallTop: 44, lipT: 8, window: 64, plateT: 4,
-  cradleS: [6, 38],
+  cradleS: [24, 40], // the seat under the case, in front of the USB-C window
   reach: 166,
   pcb: { s0: 20, s1: 26, r: 78 },
   esp: { x: 26, y: 4, w: 50, d: 53, h: 10 }, // ESP32-C3-MINI-1U: 13.2 x 12.5 mm module under a shield

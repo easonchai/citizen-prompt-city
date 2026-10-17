@@ -2,7 +2,7 @@ const DATA = __DATA__;
 const follow = null;
 const stage = document.querySelector(".cz-stage");
 const readout = document.querySelector("[data-readout]");
-const hint = document.querySelector("[data-hint]") ?? document.querySelector(".iso-hint");
+const hint = document.querySelector('[data-corner="hint"]');
 const buttons = [...document.querySelectorAll(".cz-part")];
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 const narrow = matchMedia("(hover: none), (max-width: 480px)");
