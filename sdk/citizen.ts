@@ -7,6 +7,7 @@ export type State = {
   msg: string; // first 64 chars of the latest assistant reply, "" if none
   checkin: string; // city of the latest check-in, "" if none
   name: string; // the pet's name, "" on 404 / DB failure
+  skies: string; // granted sky unlocks, comma-separated in the order kl,sg,tyo (e.g. "kl,sg"), "" if none
   updatedAt: string | null; // ISO time of the later of msg and checkin
   now: string; // server time, ISO
   error?: string; // "1 poll per 10 s" on 429

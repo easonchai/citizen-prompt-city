@@ -8,7 +8,7 @@ The badge firmware (`firmware/src/main.cpp`) is the reference client. It speaks 
 
 | Function | Route | Resolves to |
 |---|---|---|
-| `getState(base, slug)` | `GET /api/c/<slug>/state` | `State`: `{ msg, checkin, name, updatedAt, now, error? }` |
+| `getState(base, slug)` | `GET /api/c/<slug>/state` | `State`: `{ msg, checkin, name, skies, updatedAt, now, error? }` (`skies` is a flat string like `"kl,sg"`) |
 | `sendMessage(base, slug, text)` | `POST /api/c/<slug>/chat` | `{ reply }`, `{ reply: null, refused: true }` or `{ error }` |
 | `postTelemetry (needs the badge device key)(base, slug, json)` | `POST /api/c/<slug>/telemetry` | `{ ok: true }` or `{ error }` |
 | `getTelemetry(base, slug, n = 100)` | `GET /api/c/<slug>/telemetry?n=` | `TelemetryRow[]` (newest first) or `{ error }` |
