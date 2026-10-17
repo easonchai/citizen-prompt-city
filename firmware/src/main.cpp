@@ -253,6 +253,19 @@ static bool json_str(const String &body, const char *key, char *out, size_t cap)
   return true;
 }
 
+// "kl,sg,tyo" -> bit per enum cz_sky. Unknown names are ignored, so the server can add skies before the firmware.
+static unsigned skies_mask(const char *list) {
+  static const char *const names[CZ_SKIES] = {"kl", "sg", "tyo"};
+  unsigned mask = 0;
+  for (int i = 0; i < CZ_SKIES; i++) {
+    const char *p = strstr(list, names[i]);
+    size_t n = strlen(names[i]);
+    while (p && !((p == list || p[-1] == ',') && (p[n] == ',' || !p[n]))) p = strstr(p + 1, names[i]);
+    if (p) mask |= 1u << i;
+  }
+  return mask;
+}
+
 // Non-blocking (F9): the pet runs while WiFi connects. "fail" after 8 s; WiFi keeps retrying in the background.
 static void wifi_begin() {
   if (!rtc_last_upd[0]) strlcpy(rtc_last_upd, prefs.getString("last_upd", "").c_str(), sizeof rtc_last_upd);
@@ -370,6 +383,12 @@ static void wifi_poll() {
         prefs.putString("last_city", buf);
         cz_checkin(buf);
       }
+      // skies the badge has unlocked; kept in prefs so a badge offline at boot still draws them
+      if (json_str(body, "skies", buf, sizeof buf)) {
+        unsigned mask = skies_mask(buf);
+        if (mask != prefs.getUInt("skies", 1)) prefs.putUInt("skies", mask);
+        cz_set_skies(mask);
+      }
       if (json_str(body, "name", buf, sizeof buf) && buf[0] && prefs.getString("name", "") != buf) {
         prefs.putString("name", buf);
         cz_set_name(buf);
@@ -474,6 +493,7 @@ static void run_command(char *line) {
   else if (!strcmp(line, "token")) { prefs.putString("token", arg); }  // device key from /admin/badges/<slug>, sent as X-Badge-Key
   else if (!strcmp(line, "msg")) cz_message(arg);
   else if (!strcmp(line, "checkin")) cz_checkin(*arg ? arg : "KL");
+  else if (!strcmp(line, "skies")) { unsigned m = skies_mask(arg); prefs.putUInt("skies", m); cz_set_skies(m); }
   else if (!strcmp(line, "wifi")) {
     char *pass = strchr(arg, ' ');
     if (pass) *pass++ = 0; else pass = arg + strlen(arg);
@@ -505,7 +525,7 @@ static void run_command(char *line) {
     rtc_last_upd[0] = rtc_last_city[0] = 0;
 #endif
     Serial.println("cleared, restarting"); delay(100); ESP.restart(); }
-  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | token KEY | msg ... | checkin [CITY] | brightness 100|40|10 | time HH:MM | tz N | version | update | autoupdate 0|1 | stats | reset"); return; }
+  else { Serial.println("commands: name X | creature N | prompt ... | wifi SSID PASS | url BASE | slug S | token KEY | msg ... | checkin [CITY] | skies kl,sg,tyo | brightness 100|40|10 | time HH:MM | tz N | version | update | autoupdate 0|1 | stats | reset"); return; }
   Serial.println("ok");
 }
 
@@ -521,7 +541,7 @@ static void poll_serial() {
 // Applies the core's brightness (F8) to the backlight PWM when it changes. -1 forces a re-apply.
 static int applied_brightness = -1;
 // Settings changes the host must persist: load_pet re-applies the 'creature'/'name' prefs on every wake.
-static int known_creature = -1, known_brightness = -1;
+static int known_creature = -1, known_brightness = -1, known_always_on = -1, known_sky = -1;
 static void apply_brightness() {
   int b = cz_brightness();
   if (b == applied_brightness) return;
@@ -541,10 +561,13 @@ static void load_pet(uint32_t slept) {
   if (prefs.isKey("name")) cz_set_name(prefs.getString("name").c_str());
   if (prefs.isKey("prompt")) cz_set_prompt(prefs.getString("prompt").c_str());
   cz_set_timezone(prefs.getInt("tz", 8));
+  cz_set_skies(prefs.getUInt("skies", 1));  // after cz_init: the blob remembers which skies were already shown
   known_tz = cz_timezone();
   cz_set_version(CZ_VERSION);
   known_creature = cz_creature();
   known_brightness = cz_brightness();
+  known_always_on = cz_always_on();
+  known_sky = cz_sky();
   clock_from_system();  // after deep sleep the RTC kept SNTP time
   set_qr();
   last_hearts = cz_hearts();
@@ -656,8 +679,11 @@ void loop() {
     set_qr();  // the default slug follows the creature
     save_now();
   }
-  if (cz_brightness() != known_brightness) {  // Settings -> Brightness: lives in the save blob, so write it now
+  // Settings -> Brightness, Screen, Sky: all live in the save blob, so write it now
+  if (cz_brightness() != known_brightness || cz_always_on() != known_always_on || cz_sky() != known_sky) {
     known_brightness = cz_brightness();
+    known_always_on = cz_always_on();
+    known_sky = cz_sky();
     save_now();
   }
   int y0, y1;

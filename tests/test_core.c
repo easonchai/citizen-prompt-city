@@ -267,7 +267,7 @@ static void test_brightness(void) {
     CHECK(cz_brightness() == 100);
     cz_set_brightness(10);
     CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
-    CHECK(blob[2] == 3);
+    CHECK(blob[2] == 4);
     cz_init(0, blob, sizeof blob, 0);
     CHECK(cz_brightness() == 10);
     CHECK(cz_screen() != CZ_S_HATCH);
@@ -311,6 +311,7 @@ static void test_settings(void) {
     right(); CHECK(cz_brightness() == 100);
     left(); left(); CHECK(cz_brightness() == 10);
     right(); right(); CHECK(cz_brightness() == 100);
+    down();                                  /* Screen */
     down();                                  /* Clock */
     right(); CHECK(cz_clock() == 12 * 60 + 15);
     left(); left(); CHECK(cz_clock() == 11 * 60 + 45);
@@ -319,7 +320,7 @@ static void test_settings(void) {
     down();                                  /* Timezone: +1 h moves the local clock */
     right(); CHECK(cz_timezone() == 9); CHECK(cz_clock() == 12 * 60 + 45);
     left(); CHECK(cz_timezone() == 8);
-    vswipe(-1); vswipe(-1);                  /* swipe up twice: Citizen, WiFi */
+    vswipe(-1); vswipe(-1); vswipe(-1);      /* swipe up three times: Citizen, Sky, WiFi */
     CHECK(cz_host_request() == CZ_REQ_NONE);
     right(); CHECK(cz_host_request() == CZ_REQ_PORTAL); CHECK(cz_host_request() == CZ_REQ_NONE);
     tap_at(120, 100);                        /* a centre tap also activates */
@@ -331,7 +332,7 @@ static void test_settings(void) {
     check_and_write("settings_update");
     vswipe(1);                               /* swipe down goes back up the wheel: WiFi */
     right(); CHECK(cz_host_request() == CZ_REQ_PORTAL);
-    up(); up(); up(); up();                  /* Citizen, Timezone, Clock, Brightness */
+    up(); up(); up(); up(); up(); up();      /* Sky, Citizen, Timezone, Clock, Screen, Brightness */
     left(); CHECK(cz_brightness() == 40);
     CHECK(cz_screen() == CZ_S_SETTINGS);
     hold(); CHECK(cz_screen() == CZ_S_HOME); /* hold exits */
@@ -341,7 +342,7 @@ static void test_settings(void) {
     run(200); CHECK(cz_screen() == CZ_S_HOME); /* 20 s idle exits */
 
     quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
-    for (i = 0; i < 7; i++) down();          /* down seven times reaches Exit */
+    for (i = 0; i < 9; i++) down();          /* down nine times reaches Exit */
     CHECK(cz_screen() == CZ_S_SETTINGS);
     right(); CHECK(cz_screen() == CZ_S_HOME);
 
@@ -457,7 +458,7 @@ static void test_dither(void) {
     CHECK(cz_screen() == CZ_S_SLEEP);
     fb = cz_framebuffer();
     /* left of the pet: clock tower and low blocks stay solid DEEP, the sky around them keeps navy/dusk */
-    CHECK(count_color(fb, 40, 118, 56, 164, CZ_C_DEEP, 1) == 16 * 46);
+    CHECK(count_color(fb, 40, 118, 56, 164, CZ_C_DEEP, 1) >= 16 * 46 - 4); /* less its one lit 2x2 window, part dithered */
     CHECK(count_color(fb, 0, 100, 56, 164, CZ_C_DEEP, 1) >= 200);
     CHECK(count_color(fb, 0, 40, 40, 128, CZ_C_DEEP, 0) >= 200);
 }
@@ -591,6 +592,63 @@ static void test_double_tap_undoes_feed(void) {
     printf("  double tap: feed undone, hearts stay %d, settings open\n", cz_hearts());
 }
 
+/* SCREEN: AUTO sleeps after 30 s idle; ALWAYS ON never asks the host to sleep. Saved in the blob. */
+static void test_screen_setting(void) {
+    uint8_t blob[CZ_SAVE_SIZE];
+    boot();
+    CHECK(cz_always_on() == 0);
+    quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
+    down(); right(); CHECK(cz_always_on() == 1);
+    check_and_write("settings_screen");
+    hold(); CHECK(cz_screen() == CZ_S_HOME);
+    run(120000); CHECK(cz_screen() != CZ_S_SLEEP); CHECK(cz_wants_sleep() == 0);
+    CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
+    cz_init(0, blob, sizeof blob, 0); CHECK(cz_always_on() == 1);
+    cz_set_always_on(0); run(31000); CHECK(cz_screen() == CZ_S_SLEEP); CHECK(cz_wants_sleep() == 1);
+    boot(); CHECK(cz_always_on() == 0);
+}
+
+/* SKY: the host says which skies are unlocked; Settings cycles through them; a new unlock is shown at once. */
+static void test_skies(void) {
+    uint8_t blob[CZ_SAVE_SIZE];
+    boot();
+    CHECK(cz_sky() == CZ_SKY_KL);
+    cz_set_skies(1u << CZ_SKY_KL); CHECK(cz_sky() == CZ_SKY_KL);
+    cz_set_skies(1u << CZ_SKY_KL | 1u << CZ_SKY_SG); CHECK(cz_sky() == CZ_SKY_SG); /* the gift: show it */
+    run(100); check_and_write("home_sg");
+    cz_set_skies(1u << CZ_SKY_KL | 1u << CZ_SKY_SG); CHECK(cz_sky() == CZ_SKY_SG); /* no change, no switch */
+    cz_set_skies(1u << CZ_SKY_KL | 1u << CZ_SKY_SG | 1u << CZ_SKY_TYO); CHECK(cz_sky() == CZ_SKY_TYO);
+    run(100); check_and_write("home_tyo");
+    quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
+    down(); down(); down(); down(); down();  /* Screen, Clock, Timezone, Citizen, Sky */
+    right(); CHECK(cz_sky() == CZ_SKY_KL);   /* wraps through the unlocked ones */
+    right(); CHECK(cz_sky() == CZ_SKY_SG);
+    check_and_write("settings_sky");
+    left(); left(); CHECK(cz_sky() == CZ_SKY_TYO);
+    CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
+    cz_init(0, blob, sizeof blob, 0);
+    CHECK(cz_sky() == CZ_SKY_TYO);
+    cz_set_skies(1u << CZ_SKY_KL | 1u << CZ_SKY_SG | 1u << CZ_SKY_TYO); CHECK(cz_sky() == CZ_SKY_TYO); /* boot re-apply is not new */
+    cz_set_skies(1u << CZ_SKY_KL); CHECK(cz_sky() == CZ_SKY_KL); /* a sky no longer granted is not drawn */
+    run(100); check_and_write("home_kl_again");
+    {   /* every sky at every time of day, for the gallery */
+        static const char *const city[CZ_SKIES] = {"kl", "sg", "tyo"};
+        static const int at[4] = {3 * 60, 7 * 60, 12 * 60, 18 * 60 + 30};
+        char name[32];
+        int c, t;
+        cz_set_skies(7);
+        for (c = 0; c < CZ_SKIES; c++)
+            for (t = 0; t < 4; t++) {
+                quick_tap(); quick_tap(); down(); down(); down(); down(); down();
+                while (cz_sky() != c) right();
+                hold();
+                cz_set_clock(at[t]); run(100);
+                snprintf(name, sizeof name, "sky_%s_%02d%02d", city[c], at[t] / 60, at[t] % 60);
+                check_and_write(name);
+            }
+    }
+}
+
 int main(void) {
     test_flow();
     test_save();
@@ -598,6 +656,8 @@ int main(void) {
     test_telemetry();
     test_brightness();
     test_settings();
+    test_screen_setting();
+    test_skies();
     test_clock();
     test_qr();
     test_dismiss();

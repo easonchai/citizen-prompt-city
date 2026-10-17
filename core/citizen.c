@@ -25,10 +25,10 @@
 
 #define SAVE_MAGIC0 'C'
 #define SAVE_MAGIC1 'Z'
-#define SAVE_VERSION 3 /* 3 adds clock and timezone; version 2 blobs still restore */
+#define SAVE_VERSION 4 /* 3 adds clock and timezone, 4 adds sky and screen; versions 2 and 3 still restore */
 #define DAY_MS 86400000UL
 #define SETTINGS_IDLE_MS 20000UL
-enum { SET_BRIGHT, SET_CLOCK, SET_TZ, SET_CITIZEN, SET_WIFI, SET_UPDATE, SET_ABOUT, SET_EXIT, SET_N };
+enum { SET_BRIGHT, SET_SCREEN, SET_CLOCK, SET_TZ, SET_CITIZEN, SET_SKY, SET_WIFI, SET_UPDATE, SET_ABOUT, SET_EXIT, SET_N };
 
 static const char *const DEFAULT_NAME[CZ_CREATURES] = {"TENUK", "KENYALANG", "HARIMAU"};
 static const char DEFAULT_PROMPT[] = "YOU ARE A SKEPTICAL OPS LEAD WHO EATS CLEAN DATA";
@@ -44,6 +44,8 @@ static struct {
     int undo_ok, undo_hearts, undo_lost; uint32_t undo_hunger; /* the feed a first tap did, undone if a double tap follows */
     uint32_t t0, last_tap;
     int brightness;
+    int always_on;   /* Settings SCREEN: never idle into Sleep */
+    int sky; unsigned skies; /* chosen sky and the unlocked mask (bit per enum cz_sky) */
     int tap_home; /* the last tap landed on Home or Sulk, so a quick second tap opens Settings */
     int tap_set;  /* the last tap landed on Settings, so a quick second tap leaves it */
     int portrait; /* the web page's portrait of the pet: not a device, so no hearts, touch or sleep */
@@ -141,7 +143,7 @@ static void advance(uint32_t now) {
     }
     if (S.screen == CZ_S_HOME && sulking()) S.screen = CZ_S_SULK;
     if (S.screen == CZ_S_SULK && !sulking()) S.screen = CZ_S_HOME;
-    if ((S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) && S.idle_ms >= IDLE_SLEEP_MS && !S.portrait) go(CZ_S_SLEEP);
+    if ((S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) && S.idle_ms >= IDLE_SLEEP_MS && !S.portrait && !S.always_on) go(CZ_S_SLEEP);
     if (S.screen == CZ_S_SETTINGS && S.idle_ms >= SETTINGS_IDLE_MS) go(base_screen());
     if (S.pending && (S.screen != CZ_S_SETTINGS || now - S.pending_ms >= DOUBLE_TAP_MS)) {
         S.pending = 0;
@@ -236,7 +238,16 @@ static void setting_change(int dir) {
         S.tz += dir;
         if (S.clock_known) S.day_ms = (S.day_ms + (dir > 0 ? 60 : 1380) * MIN_MS) % DAY_MS;
         break;
+    case SET_SCREEN: S.always_on = dir > 0; break;
     case SET_CITIZEN: cz_set_creature((S.creature + (dir > 0 ? 1 : CZ_CREATURES - 1)) % CZ_CREATURES); break;
+    case SET_SKY: /* step to the next unlocked sky, wrapping */
+        m = cz_sky();
+        for (i = 0; i < CZ_SKIES; i++) {
+            m = (m + (dir > 0 ? 1 : CZ_SKIES - 1)) % CZ_SKIES;
+            if (S.skies >> m & 1) break;
+        }
+        S.sky = m;
+        break;
     case SET_WIFI: if (dir > 0) S.reqs |= 1u << CZ_REQ_PORTAL; break;
     case SET_UPDATE: if (dir > 0) S.reqs |= 1u << (S.update[0] ? CZ_REQ_INSTALL_UPDATE : CZ_REQ_CHECK_UPDATE); break;
     case SET_EXIT: if (dir > 0) { go(base_screen()); return; } break;
@@ -283,7 +294,7 @@ void cz_touch(int kind, int x, int y, uint32_t now_ms) {
 void cz_tick(uint32_t now_ms) { advance(now_ms); }
 
 /* ---- save blob: magic(2) version creature hearts hatched lost brightness hunger_s(4) play_s(4) name(11)
- * tz+12(1) day_s(4, 0xFFFFFFFF = clock unknown) ... crc(4) at the end */
+ * tz+12(1) day_s(4, 0xFFFFFFFF = clock unknown) sky(1) always_on(1) skies(1) ... crc(4) at the end */
 static uint32_t checksum(const uint8_t *p, int n) { /* FNV-1a */
     uint32_t h = 2166136261UL;
     while (n--) { h ^= *p++; h *= 16777619UL; }
@@ -305,16 +316,19 @@ int cz_save(uint8_t *out, int cap) {
     for (i = 0; i < NAME_MAX && S.name[i]; i++) out[16 + i] = (uint8_t)S.name[i];
     out[27] = (uint8_t)(S.tz + 12);
     put32(out + 28, S.clock_known ? S.day_ms / 1000 : 0xFFFFFFFFUL);
+    out[32] = (uint8_t)S.sky; out[33] = (uint8_t)S.always_on; out[34] = (uint8_t)S.skies;
     put32(out + CZ_SAVE_SIZE - 4, checksum(out, CZ_SAVE_SIZE - 4));
     return CZ_SAVE_SIZE;
 }
 
 static int restore(const uint8_t *b, int len) {
-    if (!b || len < CZ_SAVE_SIZE || b[0] != SAVE_MAGIC0 || b[1] != SAVE_MAGIC1 || (b[2] != 2 && b[2] != SAVE_VERSION)) return 0;
+    if (!b || len < CZ_SAVE_SIZE || b[0] != SAVE_MAGIC0 || b[1] != SAVE_MAGIC1 || b[2] < 2 || b[2] > SAVE_VERSION) return 0;
     if (get32(b + CZ_SAVE_SIZE - 4) != checksum(b, CZ_SAVE_SIZE - 4)) return 0;
     if (b[3] >= CZ_CREATURES || b[4] > 4 || b[6] > 4 || (b[7] != 100 && b[7] != 40 && b[7] != 10)) return 0;
-    if (b[2] == SAVE_VERSION && (b[27] > 26 || (get32(b + 28) >= 86400 && get32(b + 28) != 0xFFFFFFFFUL))) return 0;
-    if (b[2] == SAVE_VERSION) {
+    if (b[2] >= 3 && (b[27] > 26 || (get32(b + 28) >= 86400 && get32(b + 28) != 0xFFFFFFFFUL))) return 0;
+    if (b[2] >= 4 && (b[32] >= CZ_SKIES || b[33] > 1 || b[34] >= 1u << CZ_SKIES)) return 0;
+    if (b[2] >= 4) { S.sky = b[32]; S.always_on = b[33]; S.skies = b[34] | 1u << CZ_SKY_KL; }
+    if (b[2] >= 3) {
         S.tz = b[27] - 12;
         S.clock_known = get32(b + 28) != 0xFFFFFFFFUL;
         S.day_ms = S.clock_known ? get32(b + 28) * 1000 : 0;
@@ -342,6 +356,7 @@ void cz_init(uint32_t seed, const uint8_t *saved, int saved_len, uint32_t slept_
     copy(S.city, sizeof S.city, "KL");
     S.stale = 1;
     S.brightness = 100;
+    S.skies = 1u << CZ_SKY_KL;
     S.tz = 8;
     for (i = 0; i < CZ_STAT_COUNT; i++) cz_stats[i] = 0;
     if (restore(saved, saved_len)) {
@@ -371,6 +386,17 @@ void cz_set_creature(int creature) {
 }
 void cz_set_name(const char *name) { copy(S.name, sizeof S.name, name); S.stale = 1; }
 void cz_set_prompt(const char *prompt) { copy(S.prompt, sizeof S.prompt, prompt); S.stale = 1; }
+int cz_always_on(void) { return S.always_on; }
+void cz_set_always_on(int on) { S.always_on = on != 0; S.idle_ms = 0; S.stale = 1; }
+void cz_set_skies(unsigned mask) {
+    unsigned gained, i;
+    mask = (mask | 1u << CZ_SKY_KL) & ((1u << CZ_SKIES) - 1);
+    gained = mask & ~S.skies;
+    S.skies = mask;
+    for (i = 0; i < CZ_SKIES; i++) if (gained >> i & 1) S.sky = (int)i; /* a fresh unlock is the gift: show it */
+    S.stale = 1;
+}
+int cz_sky(void) { return S.skies >> S.sky & 1 ? S.sky : CZ_SKY_KL; }
 int cz_brightness(void) { return S.brightness; }
 void cz_set_brightness(int pct) { if (pct == 100 || pct == 40 || pct == 10) S.brightness = pct; }
 void cz_set_qr_url(const char *url) { copy(S.url, sizeof S.url, url); S.stale = 1; }
@@ -428,7 +454,7 @@ int cz_pose(void) {
 }
 
 /* ---- Settings text */
-static const char *const SET_LABEL[SET_N] = {"BRIGHTNESS", "CLOCK", "TIMEZONE", "CITIZEN", "WIFI", "UPDATE", "ABOUT", "EXIT"};
+static const char *const SET_LABEL[SET_N] = {"BRIGHTNESS", "SCREEN", "CLOCK", "TIMEZONE", "CITIZEN", "SKY", "WIFI", "UPDATE", "ABOUT", "EXIT"};
 
 static char *put(char *d, const char *s, int max) { while (*s && max--) *d++ = *s++; *d = 0; return d; }
 static char *num(char *d, int v, int width) { /* decimal, zero padded to width */
@@ -441,6 +467,8 @@ static char *num(char *d, int v, int width) { /* decimal, zero padded to width *
     return d;
 }
 
+static const char *const SKY_NAME[CZ_SKIES] = {"KUALA LUMPUR", "SINGAPORE", "TOKYO"};
+
 static const char *setting_value(void) {
     static const char *const wifi[4] = {"OFF", "CONNECTING", "OK", "FAIL"};
     char *d = S.set_value;
@@ -451,7 +479,9 @@ static const char *setting_value(void) {
     case SET_BRIGHT: num(d, S.brightness, 1); break;
     case SET_CLOCK: if (m < 0) put(d, "--:--", 5); else { d = num(d, m / 60, 2); d = put(d, ":", 1); num(d, m % 60, 2); } break;
     case SET_TZ: d = put(d, S.tz < 0 ? "UTC" : "UTC+", 4); num(d, S.tz, 1); break;
+    case SET_SCREEN: put(d, S.always_on ? "ALWAYS ON" : "AUTO OFF", 9); break;
     case SET_CITIZEN: put(d, DEFAULT_NAME[S.creature], 10); break;
+    case SET_SKY: put(d, SKY_NAME[cz_sky()], 12); break;
     case SET_WIFI: if (!S.ssid[0]) put(d, "NOT SET", 7); else { d = put(d, S.ssid, 12); d = put(d, " ", 1); put(d, wifi[S.wifi_state], 10); } break;
     case SET_UPDATE:
         if (S.version[0]) { d = put(d, "V", 1); d = put(d, S.version, 15); d = put(d, " ", 1); }
@@ -508,7 +538,7 @@ static void render_if_needed(void) {
     int bx, by, bw, bh;
     if (!S.stale && !diff) return;
     v.screen = S.screen; v.creature = S.creature; v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
-    v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url; v.phase = phase();
+    v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url; v.phase = phase(); v.sky = cz_sky();
     v.anim = S.screen == CZ_S_HATCH ? 0 : anim();
     v.portrait = S.portrait;
     if (S.screen == CZ_S_SETTINGS) {

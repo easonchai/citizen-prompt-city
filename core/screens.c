@@ -13,24 +13,35 @@ static void px2(int color, const uint8_t (*pts)[2], int n, int sc) {
 
 static int phase; /* enum cz_phase of the frame being drawn, set by cz_draw */
 
-/* KL by time of day (PRD 2.7). Horizon at y=164. Pixel (20,20) is the top sky colour, distinct per phase. */
-static void skyline(void) {
-    static const uint8_t stars[][2] = {{20,15},{35,9},{75,12},{95,20},{55,6},{100,35},{15,35}};
+static int sky;  /* enum cz_sky of the frame being drawn, set by cz_draw */
+static int band; /* the horizon band's colour this phase: what shows through gaps in a skyline */
+
+/* 2x2 Bresenham line and midpoint circle ring, for the Flyer's spokes and rim */
+static void line2(int x0, int y0, int x1, int y1, int c) {
+    int dx = x1 > x0 ? x1 - x0 : x0 - x1, dy = y1 > y0 ? y0 - y1 : y1 - y0;
+    int sx = x0 < x1 ? 2 : -2, sy = y0 < y1 ? 2 : -2, e = dx + dy, e2;
+    for (;;) {
+        cz_rect(x0, y0, 2, 2, c);
+        if ((sx > 0 ? x0 >= x1 : x0 <= x1) && (sy > 0 ? y0 >= y1 : y0 <= y1)) break;
+        e2 = 2 * e;
+        if (e2 >= dy) { e += dy; x0 += sx; }
+        if (e2 <= dx) { e += dx; y0 += sy; }
+    }
+}
+static void ring2(int cx, int cy, int r, int c) {
+    int x = r, y = 0, e = 1 - r;
+    while (x >= y) {
+        cz_rect(cx + x, cy + y, 2, 2, c); cz_rect(cx - x, cy + y, 2, 2, c); cz_rect(cx + x, cy - y, 2, 2, c); cz_rect(cx - x, cy - y, 2, 2, c);
+        cz_rect(cx + y, cy + x, 2, 2, c); cz_rect(cx - y, cy + x, 2, 2, c); cz_rect(cx + y, cy - x, 2, 2, c); cz_rect(cx - y, cy - x, 2, 2, c);
+        y++;
+        if (e < 0) e += 2 * y + 1; else { x--; e += 2 * (y - x) + 1; }
+    }
+}
+
+static void kl(int night) {
     static const uint8_t lit[][2] = {{150,102},{154,112},{170,108},{174,130},{60,148},{66,154},
                                      {6,144},{184,144},{228,154},{150,136},{172,148},{46,122}};
-    static const uint8_t top[4] = {CZ_C_NAVY, CZ_C_DUSK, CZ_C_DAYSKY, CZ_C_ROSE};
-    static const uint8_t band[4] = {CZ_C_DUSK, CZ_C_ROSE, CZ_C_DAYHORIZON, CZ_C_DUSK};
     const int s = CZ_C_DEEP;
-    int x, y;
-    cz_rect(0, 0, CZ_W, CZ_H, top[phase]);
-    cz_rect(0, 128, CZ_W, 36, band[phase]);
-    if (phase == CZ_PH_NIGHT) { px2(CZ_C_INK, stars, 7, 2); cz_icon(CZ_I_MOON, 180, 44, CZ_C_INK, 2); }
-    if (phase == CZ_PH_DAWN) cz_icon(CZ_I_SUN, 12, 120, CZ_C_GOLD, 2);     /* rising in the rose band, clear of the pet */
-    if (phase == CZ_PH_DAY) {
-        cz_icon(CZ_I_SUN, 180, 44, CZ_C_GOLD, 2);
-        cz_rect(30, 56, 16, 4, CZ_C_CLOUD); cz_rect(24, 60, 30, 6, CZ_C_CLOUD);
-        cz_rect(192, 80, 14, 4, CZ_C_CLOUD); cz_rect(186, 84, 28, 6, CZ_C_CLOUD);
-    }
     cz_rect(0,136,24,28,s); cz_rect(24,144,14,20,s);
     cz_rect(40,118,16,46,s); cz_rect(44,110,8,8,s); cz_rect(46,106,4,4,s);         /* Sultan Abdul Samad clock tower */
     cz_rect(56,140,20,24,s); cz_rect(76,148,10,16,s);
@@ -40,11 +51,112 @@ static void skyline(void) {
     cz_rect(180,138,12,26,s); cz_rect(192,146,16,18,s);
     cz_rect(218,108,4,56,s); cz_rect(214,116,12,8,s); cz_rect(216,112,8,4,s); cz_rect(218,100,4,8,s); /* KL Tower */
     cz_rect(226,150,14,14,s);
-    if (phase == CZ_PH_NIGHT || phase == CZ_PH_DUSK) px2(CZ_C_GOLD, lit, 12, 2);
+    int i;
+    if (night) for (i = 0; i < 12; i++) cz_rect(lit[i][0], lit[i][1], 2, 2, CZ_C_GOLD); /* full-scale coordinates */
+}
+
+/* Marina Bay: Sands with its SkyPark overhanging north, the CBD behind, the Esplanade's durian domes, the Flyer. */
+static void sg(int night) {
+    static const uint8_t lit[][2] = {{8,52},{15,52},{22,52},{8,62},{22,62},{15,70},{8,74},{22,74},   /* Sands, 2x scale */
+                                     {68,52},{70,60},{76,56},{78,64},{84,58},{84,70}};               /* CBD */
+    const int s = CZ_C_DEEP;
+    int i, x;
+    for (i = 0; i < 3; i++) {                                     /* three slim towers, each on two legs */
+        x = 14 + 14 * i;
+        cz_rect(x, 96, 8, 68, s);
+        cz_rect(x - 1, 150, 10, 14, s);
+        cz_rect(x + 3, 136, 2, 28, band);                          /* the split between the legs shows sky */
+    }
+    cz_rect(0, 90, 50, 6, s); cz_rect(2, 88, 44, 2, s);           /* SkyPark: long, cantilevered well past the north tower */
+    cz_rect(8, 86, 4, 2, s); cz_rect(24, 86, 6, 2, s); cz_rect(38, 86, 2, 2, s); /* its trees */
+    cz_rect(130, 108, 12, 56, s); cz_rect(144, 92, 14, 72, s); cz_rect(150, 84, 2, 8, s);
+    cz_rect(160, 116, 12, 48, s); cz_rect(174, 128, 10, 36, s);   /* the CBD, peeking past the pet */
+    cz_rect(62, 152, 14, 12, s); cz_rect(64, 148, 10, 4, s); cz_rect(66, 146, 6, 2, s); /* Esplanade */
+    cz_rect(78, 154, 12, 10, s); cz_rect(80, 150, 8, 4, s);
+    for (x = 64; x < 90; x += 4) cz_rect(x, 156 - (x & 4), 2, 2, CZ_C_NAVY);  /* their spikes catch the light */
+    ring2(206, 112, 28, s);                                       /* Singapore Flyer */
+    for (i = 0; i < 8; i++) {
+        static const int8_t sp[8][2] = {{28,0},{20,20},{0,28},{-20,20},{-28,0},{-20,-20},{0,-28},{20,-20}};
+        line2(206, 112, 206 + sp[i][0], 112 + sp[i][1], s);
+    }
+    cz_rect(202, 108, 10, 10, s);                                 /* hub */
+    line2(206, 116, 190, 156, s); line2(206, 116, 222, 156, s);   /* the A-frame legs */
+    cz_rect(184, 154, 52, 10, s); cz_rect(236, 158, 4, 6, s);     /* terminal */
+    if (night) {
+        px2(CZ_C_GOLD, lit, 14, 2);
+        for (x = 2; x < 48; x += 4) cz_rect(x, 92, 2, 2, CZ_C_GOLD); /* SkyPark rim lights */
+        for (i = 0; i < 8; i++) {
+            static const int8_t cap[8][2] = {{30,0},{21,21},{0,30},{-21,21},{-30,0},{-21,-21},{0,-30},{21,-21}};
+            cz_rect(206 + cap[i][0], 112 + cap[i][1], 2, 2, CZ_C_GOLD);
+        }
+    }
+}
+
+/* Tokyo: Fuji far off, a torii, Tokyo Tower in its orange and white, the Skytree lit in its pale blue. */
+static void tyo(int night) {
+    static const uint8_t lit[][2] = {{4,74},{10,76},{38,78},{40,72},{90,76},{96,78},{110,74},{116,77}};
+    const int s = CZ_C_DEEP;
+    const int fuji = phase == CZ_PH_DAWN ? CZ_C_NAVY : CZ_C_DUSK; /* one step off the sky behind it */
+    int y, w;
+    for (y = 98; y < 164; y += 2) {                               /* Fuji: a flat crown, then slopes that spread */
+        w = 8 + (y - 98) * (y - 98) / 40 + (y - 98) / 2;
+        cz_rect(34 - w, y, 2 * w, 2, fuji);
+        if (y < 110) cz_rect(34 - w + 2, y, 2 * w - 4, 2, CZ_C_CLOUD);
+    }
+    cz_rect(22, 110, 4, 2, CZ_C_CLOUD); cz_rect(32, 110, 6, 4, CZ_C_CLOUD); cz_rect(42, 110, 4, 2, CZ_C_CLOUD); /* the snow's ragged edge */
+    cz_rect(0, 144, 14, 20, s); cz_rect(14, 150, 10, 14, s); cz_rect(72, 146, 12, 18, s); cz_rect(84, 152, 10, 12, s);
+    cz_rect(102, 142, 10, 22, s); cz_rect(112, 148, 16, 16, s);   /* the low city */
+    cz_rect(32, 144, 26, 2, CZ_C_CORAL); cz_rect(30, 142, 4, 2, CZ_C_CORAL); cz_rect(56, 142, 4, 2, CZ_C_CORAL); /* torii: kasagi */
+    cz_rect(36, 148, 18, 2, CZ_C_CORAL);                                                                        /* nuki */
+    cz_rect(38, 146, 2, 18, CZ_C_CORAL); cz_rect(50, 146, 2, 18, CZ_C_CORAL);                                   /* posts */
+    for (y = 74; y < 164; y += 2) {                               /* Tokyo Tower: tapering lattice, bands of white */
+        w = 1 + (y - 74) * (y - 74) / 600 + (y - 74) / 8;
+        cz_rect(160 - w, y, 2 * w, 2, (y - 74) % 22 < 4 && y > 80 ? CZ_C_INK : CZ_C_CORAL);
+    }
+    cz_rect(159, 62, 2, 12, CZ_C_CORAL);                          /* antenna */
+    cz_rect(153, 98, 14, 4, CZ_C_CORAL); cz_rect(148, 122, 24, 6, CZ_C_CORAL); /* top deck, main deck */
+    for (y = 146; y < 164; y += 2) cz_rect(160 - (y - 144) / 2, y, y - 144, 2, band); /* the arch between the legs */
+    cz_rect(180, 140, 14, 24, s); cz_rect(194, 148, 14, 16, s); cz_rect(230, 146, 10, 18, s);
+    cz_rect(219, 64, 2, 16, s);                                   /* Skytree: antenna, Tembo Galleria, Tembo Deck, shaft */
+    cz_rect(216, 80, 8, 6, s); cz_rect(218, 86, 4, 14, s); cz_rect(214, 100, 12, 8, s);
+    cz_rect(217, 108, 6, 42, s); cz_rect(214, 150, 12, 14, s); cz_rect(212, 158, 16, 6, s);
+    if (night) {
+        px2(CZ_C_GOLD, lit, 8, 2);
+        for (y = 86; y < 150; y += 8) cz_rect(219, y, 2, 2, CZ_C_TEAL); /* the Iki lighting */
+        cz_rect(216, 103, 8, 2, CZ_C_TEAL); cz_rect(218, 82, 4, 2, CZ_C_TEAL);
+    }
+}
+
+/* By time of day (PRD 2.7). Horizon at y=164. Pixel (20,20) is the top sky colour, distinct per phase. */
+static void skyline(void) {
+    static const uint8_t stars[][2] = {{20,15},{35,9},{75,12},{95,20},{55,6},{100,35},{15,35}};
+    static const uint8_t top[4] = {CZ_C_NAVY, CZ_C_DUSK, CZ_C_DAYSKY, CZ_C_ROSE};
+    static const uint8_t bands[4] = {CZ_C_DUSK, CZ_C_ROSE, CZ_C_DAYHORIZON, CZ_C_DUSK};
+    const int night = phase == CZ_PH_NIGHT || phase == CZ_PH_DUSK;
+    int x, y;
+    cz_rect(0, 0, CZ_W, CZ_H, top[phase]);
+    band = bands[phase];
+    cz_rect(0, 128, CZ_W, 36, band);
+    if (phase == CZ_PH_NIGHT) { px2(CZ_C_INK, stars, 7, 2); cz_icon(CZ_I_MOON, 180, 44, CZ_C_INK, 2); }
+    if (phase == CZ_PH_DAWN) {             /* rising in the rose band, clear of the pet: on Fuji's crown, through the Flyer */
+        static const uint8_t sun[CZ_SKIES][2] = {{12, 120}, {198, 104}, {26, 82}};
+        cz_icon(CZ_I_SUN, sun[sky][0], sun[sky][1], CZ_C_GOLD, 2);
+    }
+    if (phase == CZ_PH_DAY) {
+        cz_icon(CZ_I_SUN, 180, 44, CZ_C_GOLD, 2);
+        cz_rect(30, 56, 16, 4, CZ_C_CLOUD); cz_rect(24, 60, 30, 6, CZ_C_CLOUD);
+        cz_rect(192, 80, 14, 4, CZ_C_CLOUD); cz_rect(186, 84, 28, 6, CZ_C_CLOUD);
+    }
+    if (sky == CZ_SKY_SG) sg(night); else if (sky == CZ_SKY_TYO) tyo(night); else kl(night);
     cz_rect(0, 164, CZ_W, 2, CZ_C_GOLD);   /* horizon */
     cz_rect(0, 166, CZ_W, 74, CZ_C_DEEP);  /* ground */
     for (y = 168; y < 240; y += 4)
         for (x = (y / 4) % 2 ? 0 : 2; x < CZ_W; x += 4) cz_rect(x, y, 2, 2, CZ_C_NAVY);
+    if (sky == CZ_SKY_SG && night) {       /* Marina Bay holds the lights: broken streaks that thin with distance */
+        static const uint8_t ripple[][3] = {{14,170,6},{24,170,4},{36,170,6},{10,176,4},{30,176,4},{18,182,2},{40,182,2},{26,188,2},
+                                            {200,170,4},{212,170,4},{206,176,2},{218,176,2},{210,182,2}};
+        for (x = 0; x < 13; x++) cz_rect(ripple[x][0], ripple[x][1], ripple[x][2], 2, x < 8 && x % 3 == 1 ? CZ_C_TEAL : CZ_C_GOLD);
+    }
 }
 
 static void hearts(int n) {
@@ -260,6 +372,7 @@ static void settings(const struct cz_view *v) {
 
 void cz_draw(const struct cz_view *v) {
     phase = v->phase;
+    sky = v->sky;
     switch (v->screen) {
     case CZ_S_SETTINGS: settings(v); break;
     case CZ_S_HATCH: hatch(v); break;

@@ -57,6 +57,17 @@ int  cz_dirty_rows(int *y0, int *y1);          /* like cz_dirty, but also return
 enum cz_stat { CZ_STAT_FRAMES = 0, CZ_STAT_PIXELS_FILLED, CZ_STAT_SPRITE_PIXELS, CZ_STAT_TEXT_GLYPHS, CZ_STAT_COUNT };
 uint32_t cz_stat(int which);                   /* monotonic counters since init */
 
+/* Screen: AUTO lets the badge sleep after 30 s idle on Home; ALWAYS ON never asks the host to sleep
+ * (for power banks that cut out at a sleeping badge's few microamps). Chosen in Settings, saved. */
+int  cz_always_on(void);
+void cz_set_always_on(int on);
+
+/* Skies: the city drawn behind the pet. The host passes the skies the badge has unlocked (bit per enum cz_sky,
+ * KL always on); Settings picks among them and the choice is saved. A newly unlocked sky is shown at once. */
+enum cz_sky { CZ_SKY_KL = 0, CZ_SKY_SG = 1, CZ_SKY_TYO = 2, CZ_SKIES };
+void cz_set_skies(unsigned mask);
+int  cz_sky(void);                             /* the sky drawn: the chosen one if unlocked, else KL */
+
 /* Brightness: 100, 40 or 10, chosen in Settings. The host drives the backlight. */
 int  cz_brightness(void);
 void cz_set_brightness(int pct);
