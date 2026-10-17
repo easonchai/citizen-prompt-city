@@ -32,7 +32,7 @@ async function json<T>(res: Response): Promise<T> {
   return body as T;
 }
 
-/** The badge's latest reply, check-in and name. Rate limited to 1 call per 10 s per slug. */
+/** The badge's latest reply, check-in and name. Rate limited to 1 call per 10 s per slug from each address. */
 export function getState(base: string, slug: string): Promise<State> {
   return fetch(url(base, `${c(slug)}/state`), { cache: "no-store" }).then((r) => json<State>(r));
 }

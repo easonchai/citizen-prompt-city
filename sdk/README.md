@@ -14,7 +14,7 @@ The badge firmware (`firmware/src/main.cpp`) is the reference client. It speaks 
 | `getTelemetry(base, slug, n = 100)` | `GET /api/c/<slug>/telemetry?n=` | `TelemetryRow[]` (newest first) or `{ error }` |
 | `latestFirmware(base)` | `GET /api/firmware/latest` | `Firmware` or `{ error }` |
 
-`base` is the origin, for example `https://connect.prmpt.city` or `http://localhost:3110`. Error responses resolve (not reject) with the server's `{ error }` body so you can branch on them; only a network failure or a non-JSON body throws. Server rate limits apply: `/state` once per 10 s per slug, `/chat` 20 per hour per slug.
+`base` is the origin, for example `https://connect.prmpt.city` or `http://localhost:3110`. Error responses resolve (not reject) with the server's `{ error }` body so you can branch on them; only a network failure or a non-JSON body throws. Server rate limits apply: `/state` once per 10 s per slug from each address, `/chat` 20 per hour per slug.
 
 ## Node
 
@@ -42,7 +42,7 @@ import { getState } from "@prmpt/citizen-sdk";
 setInterval(async () => {
   const s = await getState(location.origin, "tenuk-d2e8");
   document.querySelector("#msg").textContent = s.msg;
-}, 10_000); // not faster: the server allows one poll per 10 s per slug
+}, 10_000); // not faster: the server allows one poll per 10 s per slug from each address
 ```
 
 Cross-origin calls from another site work for the GET routes and the JSON POSTs only if the deployment adds CORS headers; it does not today, so call from the same origin or from a server.
