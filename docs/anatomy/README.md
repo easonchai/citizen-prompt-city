@@ -53,4 +53,4 @@ node build.mjs --audit    # kit audit plus the orbit audit (about an hour); resu
 | `turn-check --pops`, explode path in 1001 steps | 30 small antialiasing flips (1–9 px) on the back shell's joins as the paint order re-sorts |
 | `turn-check --perf` | 6.9 ms per frame at 1440 px (60 fps); 29 ms at 390 px with 4× CPU throttle (30 fps) |
 | kit audit (`--audit`) | passed |
-| orbit audit (`--audit`) | see `badge-3d/audit.txt`. The quick run left painter cycles and births at the two edge-on angles (128° and 308°) and 1–3 px² swaps between neighbouring case sectors. None of these show in the pop check above. |
+| orbit audit (`--audit`), full run | failed: 171 problems, all painter-order cycles (146), swaps (14), forced picks (4) and births (7) clustered at the two edge-on angles (128° and 308°) and between neighbouring case sectors. Separation, clearances, layers, depth and coverage are 0. None show in the pop check above. Log: `badge-3d/audit.txt` |

@@ -11,5 +11,66 @@ wobble: 0 smoothed profiles whose slope turns between its ends
 saddles off their host apart: 0
 stand-in shapes: 0 items whose recorded shape covers too little of what it draws
 crowding: 0 pairs where a bend or end touches another line on screen
-audit · 0 tubes · 135 solids · 5 items · 1 depth states · 4 overlaps · 4 order rules · 3.2 s
+audit · 0 tubes · 135 solids · 5 items · 1 depth states · 4 overlaps · 4 order rules · 3.1 s
 audit passed
+separation: 0
+unseparated: 0
+cycles: 146
+  badge: back.wall.00b, back.wall.01b, back.wall.02b, back.wall.03b, back.wall.04b, back.wall.05b, back.wall.06b, back.wall.07b in 32 states from sweep 124.500° to event sweep 127.801°: split bezel.lip.16 on n = (-0.007, 0.195, -0.981), d = -107.886 (the plane of the cycle edge with the largest margin, bezel.lip.00 × bezel.lip.16)
+  badge: spin.stand.rest, back.wall.00a, back.wall.00b, back.wall.01a, back.wall.01b, back.wall.02a, back.wall.02b, back.wall.03a in 49 states from sweep 128.100° to depth sweep 128.100: split bezel.lip.30 on n = (-0.010, 0.290, 0.957), d = 105.263 (the plane of the cycle edge with the largest margin, bezel.lip.13 × bezel.lip.30)
+  badge: spin.stand.rest, back.wall.00a, back.wall.00b, back.wall.01a, back.wall.18a, back.wall.18b, back.wall.19a, back.wall.19b in 33 states from sweep 303.900° to event sweep 307.201°: split back.wall.23a on n = (-0.029, 0.831, -0.556), d = -61.113 (the plane of the cycle edge with the largest margin, back.wall.01a × back.wall.23a)
+  badge: back.wall.20b, back.wall.21b, back.wall.22b, back.wall.23b, back.wall.24b, back.wall.25b, back.wall.26b, back.wall.27b in 32 states from sweep 308.100° to depth sweep 308.100: split bezel.lip.16 on n = (-0.007, 0.195, -0.981), d = -107.886 (the plane of the cycle edge with the largest margin, bezel.lip.00 × bezel.lip.16)
+forced: 4
+  sweep 127.200°  badge: 1 forced pick
+  random sweep 127.235°  badge: 8 forced picks
+  event sweep 127.199°  badge: 8 forced picks
+  event sweep 127.201°  badge: 8 forced picks
+swaps: 14
+  badge: back.wall.26a / back.wall.27a swap at sweep 2.247 while overlapping 2.31 px²
+  badge: back.wall.11b / back.wall.12b swap at sweep 14.707 while overlapping 1.34 px²
+  badge: bezel.lip.11 / bezel.lip.12 swap at sweep 14.995 while overlapping 3.04 px²
+  badge: back.wall.28a / back.wall.29a swap at sweep 22.576 while overlapping 1.76 px²
+  badge: bezel.lip.12 / bezel.lip.13 swap at sweep 23.405 while overlapping 3.28 px²
+  badge: bezel.lip.13 / bezel.lip.14 swap at sweep 29.968 while overlapping 3.36 px²
+  badge: bezel.lip.14 / bezel.lip.15 swap at sweep 35.704 while overlapping 3.33 px²
+  badge: bezel.lip.16 / bezel.lip.17 swap at sweep 46.984 while overlapping 3.21 px²
+  badge: bezel.lip.17 / bezel.lip.18 swap at sweep 53.627 while overlapping 3.31 px²
+  badge: back.wall.01a / back.wall.02a swap at sweep 53.424 while overlapping 1.76 px²
+  badge: bezel.lip.19 / bezel.lip.20 swap at sweep 75.178 while overlapping 2.73 px²
+  badge: glass.pane / glass.chamfer swap at sweep 128.001 while overlapping 1.79 px²
+  badge: back.wall.12a / back.wall.13a swap at sweep 233.424 while overlapping 1.76 px²
+  badge: bezel.lip.09 / bezel.lip.10 swap at sweep 333.132 while overlapping 1.47 px²
+layers: 0
+rigid: 0
+swept: 0
+posed: 0
+folds: 0
+self: 0
+crowding: 0
+endon: 0
+coverage: 0
+depth: 0
+continuity: 7
+  spin.stand.rest (spin) at 128.000: q 0.250, birth 4.780, area 4.780
+  back.plate (spin) at 128.000: birth 38.999, area 38.999
+  spin.stand.rest (spin) at 128.050: q 0.250, birth 4.782, area 4.782
+  spin.stand.rest (spin) at 308.000: q 0.250, birth 4.780, area 4.780
+  back.plate (spin) at 308.000: birth 38.999, area 38.999
+  spin.stand.rest (spin) at 308.050: q 0.250, birth 4.782, area 4.782
+  panel.body (apart) at 0.333: halving 97.48 tone·px² step stays 72.60, 47.63 and 28.89 at a half, a quarter and an eighth of the frame
+worst tone step 0.25 · worst birth 39.00 px² · worst dot α step 0.010 · worst faded α step 0.031 · merges 0 · outline motion over bound 0.000 px · halving 1 of 800
+order changes: 264 states with swaps · 3819 order states · 811 posed states · 1721 planes (tightest margin 0.000) · depth oracle 59 states, 54850 overlapping pairs
+  sweep at 128.100: 2913 pairs reorder (spin.stand.seat / spin.stand.rest; spin.stand.seat / back.wall.18a; spin.stand.seat / back.wall.19a; spin.stand.seat / back.wall.19b)
+  sweep at 308.100: 2745 pairs reorder (back.wall.09a / back.wall.08b; back.wall.09a / back.wall.09b; back.wall.09a / bezel.lip.07; back.wall.09a / bezel.lip.08)
+  sweep at 233.400: 679 pairs reorder (bezel.lip.12 / bezel.lip.13; bezel.lip.12 / bezel.lip.14; bezel.lip.12 / bezel.lip.15; back.wall.12b / back.wall.13b)
+  sweep at 203.100: 626 pairs reorder (bezel.lip.17 / bezel.lip.18; bezel.lip.16 / bezel.lip.19; bezel.lip.16 / bezel.lip.20; bezel.lip.16 / bezel.lip.21)
+  apart at 0.317: 368 pairs reorder (back.wall.22a / back.plate; back.wall.22a / back.boot.stem; back.wall.22a / back.reset.stem; back.wall.22a / pcb.esp.board)
+  sweep at 206.400: 365 pairs reorder (back.wall.17a / bezel.lip.02; back.wall.17a / bezel.lip.03; back.wall.17a / bezel.lip.04; back.wall.17a / bezel.lip.05)
+  sweep at 237.300: 351 pairs reorder (back.wall.06b / bezel.lip.02; back.wall.06b / bezel.lip.03; back.wall.05b / bezel.lip.00; back.wall.05b / bezel.lip.01)
+  sweep at 144.300: 347 pairs reorder (back.wall.22a / bezel.lip.13; back.wall.22a / bezel.lip.14; back.wall.23b / bezel.lip.13; back.wall.23b / bezel.lip.14)
+  sweep at 49.800: 279 pairs reorder (back.wall.25a / back.plate; back.wall.25a / back.boot.stem; back.wall.25a / back.reset.stem; back.wall.25a / pcb.board)
+  sweep at 199.200: 267 pairs reorder (bezel.lip.17 / bezel.lip.19; bezel.lip.17 / bezel.lip.20; bezel.lip.17 / bezel.lip.21; back.wall.18b / bezel.lip.19)
+turn audit · 1560.83 s
+turn audit failed: 171 problems
+wrote badge-3d.html · 748 KB · 130 parts · badge: 1721 planes, 4364 framed, 261 dynamic · build 1.0 s
+exit 1
