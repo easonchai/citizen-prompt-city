@@ -1,0 +1,13 @@
+.cz-stage{touch-action:pan-y;cursor:grab;outline:none;border-radius:8px}
+.cz-stage:focus-visible{outline:1px solid var(--anatomy-muted);outline-offset:6px}
+.cz-stage[data-drag]{cursor:grabbing}
+.cz-stage .iso-live [data-name]{transition:opacity .25s ease}
+.cz-stage[data-focus] .iso-live [data-name]:not([data-on]):not([data-name^="spin."]){opacity:.22}
+.cz-pixels{image-rendering:pixelated}
+/* glass and touch film are clear: their fills let the panel's picture through */
+.cz-stage [data-name^="glass."] :is(.iso-fill,.iso-top,.iso-shade,.iso-tn){fill-opacity:.07}
+.cz-stage [data-name^="touch."] :is(.iso-fill,.iso-top,.iso-shade,.iso-tn){fill-opacity:.1}
+.cz-parts{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.cz-part{font:inherit;font-size:12px;color:inherit;background:transparent;border:0;border-radius:999px;padding:4px 10px 4px 6px;box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 14%,transparent);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.cz-part:hover,.cz-part:focus-visible,.cz-part[data-on]{background:color-mix(in srgb,currentColor 8%,transparent);outline:none}
+.cz-num{font-variant-numeric:tabular-nums;opacity:.55}
