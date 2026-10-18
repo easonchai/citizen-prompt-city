@@ -73,11 +73,13 @@ Lines over USB CDC at 115200, one command per line, from `run_command` in `main.
 | Command | Effect |
 |---|---|
 | `name X` | Set the pet's name (prefs `name`). |
-| `creature N` | 0 tapir, 1 hornbill, 2 tiger (prefs `creature`). Resets the QR slug to the creature default and saves. |
+| `creature N` | 0 tapir, 1 hornbill, 2 tiger (prefs `creature`), and saves. |
 | `prompt ...` | The speaker's system prompt typed out on Hatch (prefs `prompt`). |
-| `wifi SSID PASS` | Store credentials (prefs `ssid`, `pass`) and restart. |
+| `wifi SSID PASS` | Add a network (or a new password for a saved one) and start the connect cycle; no restart. With 5 saved: `wifi list full: forget one first`. |
+| `nets` | Print the saved SSIDs with their slots, never passwords. |
+| `portal` | Open the captive portal. |
 | `url BASE` | Server base URL (prefs `base`), e.g. `https://connect.prmpt.city`. Rebuilds the QR URL. |
-| `slug S` | Badge slug (prefs `slug`). The QR and API paths become `<base>/c/<slug>`. |
+| `slug S` | Badge slug (prefs `slug`). The QR and API paths become `<base>/c/<slug>`. Without one the QR points at `<base>/setup` and the badge skips `/state` and telemetry (boot logs `no slug: serial 'slug <s>' links this badge`). |
 | `token KEY` | Device key (prefs `token`), copied from `/admin/badges/<slug>` on the server. Sent as `X-Badge-Key` on every telemetry POST; without it the server answers 401 and stores nothing. |
 | `msg ...` | Show a Talk message now. |
 | `checkin [CITY]` | Show a Check-in, default KL. |
@@ -92,31 +94,30 @@ Lines over USB CDC at 115200, one command per line, from `run_command` in `main.
 
 The badge also prints one telemetry JSON line per second on its own (see Sync) and `boot: first frame at N ms` on startup.
 
-## WiFi portal
+## WiFi: saved networks, portal, Improv
 
-Credentials are provisioned through a captive portal, `run_portal` in `main.cpp`. It opens two ways:
+Up to 5 networks live in prefs `ssid0`..`ssid4` / `pass0`..`pass4`, with `net_last` the slot that last connected (-1 none). A 1.2.0 badge's single `ssid`/`pass` moves into a slot on first boot. The list (SSIDs only) goes to the core's Settings > WiFi screen after boot and after every add or forget; forgetting there removes that slot.
 
-1. Hold BOOT for 2 s once the screen is lit (holding it through power-on enters ROM download mode instead).
-2. Settings wheel, WiFi row, forward tap or swipe right (`CZ_REQ_PORTAL`).
+Connect cycle, non-blocking so the pet keeps running: async scan, then try each saved network seen in the scan, strongest first, then `net_last` if it was not seen (hidden or out of range), 8 s each. One connects: OK and an immediate sync. All fail: FAIL, and the cycle runs again after 60 s. A drop from connected starts it over. No saved network: OFF, and the first sync counts as done so the badge can still sleep.
 
-Flow:
+The captive portal (`run_portal`) opens from Settings > WiFi > ADD NETWORK, BOOT held 2 s once the screen is lit (holding it through power-on enters ROM download mode instead), or serial `portal`:
 
-1. The badge starts an open access point named `CITIZEN-XXXX` (the last two bytes of its MAC) and shows `JOIN WIFI CITIZEN-XXXX` on the Talk screen; the same line goes to serial.
-2. A DNS server answers every hostname with 192.168.4.1, and unknown paths redirect there, so phones open the captive portal page on join.
-3. The form takes WiFi name (required, up to 32), password (up to 64), server base URL (optional, up to 128, placeholder is `CZ_DEFAULT_BASE`), slug (optional, up to 32, placeholder `tenuk`) and device key (optional, up to 64). Out-of-range input gets a 400.
-4. Save writes `ssid`, `pass` and, if given, `base`, `slug` and `token` to Preferences, answers "Saved. Citizen is restarting." and restarts after 500 ms.
+1. An open access point `CITIZEN-XXXXXX` (the last three bytes of the soft-AP MAC); the badge shows a QR that joins it, plus `192.168.4.1`.
+2. DNS answers every hostname with 192.168.4.1 and unknown paths redirect there, so phones open the page on join.
+3. The page lists the networks in range (strongest first, each once; `/?rescan=1` scans again) plus Other... for a typed name, and a password. Save validates (name 1-32, password up to 64) and adds the network. With 5 saved it says so and saves nothing.
+4. After a save the portal closes and the connect cycle starts; no restart. 5 minutes without a save closes it too.
 
-The portal blocks the main loop but keeps ticking the core and pushing frames, and the serial console still works inside it. With no stored SSID the badge never starts the radio and counts its first sync as done so it can still sleep.
+Server base, slug and device key are set over serial only (`url`, `slug`, `token`).
 
-On boot with an SSID stored, `wifi_begin` connects in the background (station mode) and the pet keeps running. The Settings WiFi row shows CONNECTING for 8 s, then OK or FAIL; WiFi keeps retrying after FAIL. On connect, SNTP starts against `pool.ntp.org` with the stored timezone.
+Improv WiFi over serial (written by hand in `main.cpp`) lets ESP Web Tools on `/flash` offer "Connect to Wi-Fi" after flashing: current state, device info (`Citizen`, version, `ESP32-C3`, the AP name), scanned networks, and send WiFi settings (saved, then tried for 15 s; the answer is the badge's claim URL, `<base>/c/<slug>` or `<base>/setup`). Improv frames and text commands share the port.
 
 ## Sync
 
-All HTTP goes to `<base>/api/c/<slug>/...` with a 3 s timeout, where `<base>` is prefs `base` (default `CZ_DEFAULT_BASE`) and `<slug>` is prefs `slug` (default the creature's lowercase name: `tenuk`, `kenyalang`, `harimau`). The badge parses responses with a tiny flat-object string scanner (`json_str`), so values must be plain strings without escapes.
+All HTTP goes to `<base>/api/c/<slug>/...` with a 3 s timeout, where `<base>` is prefs `base` (default `CZ_DEFAULT_BASE`) and `<slug>` is prefs `slug` (no default: without one there is no state poll or telemetry). The badge parses responses with a tiny flat-object string scanner (`json_str`), so values must be plain strings without escapes.
 
 ### State poll
 
-`GET <base>/api/c/<slug>/state`, once right after connecting (or after the 8 s connect timeout), then every 60 s while awake. The server rate-limits to one poll per 10 s per slug and answers 429 with an empty state otherwise.
+`GET <base>/api/c/<slug>/state`, once right after every connect (or once the connect cycle has failed), then every 60 s while awake, and at once from Settings > Sync. The server rate-limits to one poll per 10 s per slug and answers 429 with an empty state otherwise.
 
 ```json
 {"msg":"<last assistant reply, at most 64 chars>","checkin":"<city or empty>","name":"<badge name>","updatedAt":"<ISO 8601 or null>","now":"2026-10-31T09:41:00.000Z"}
@@ -127,6 +128,7 @@ What the badge does with it:
 - `msg` opens Talk only when `updatedAt` differs from the last one seen. The last value is kept in RTC memory across deep sleep and in prefs `last_upd` across power loss, so an old message does not re-open Talk on every poll and wake.
 - `checkin` opens Check-in when the city differs from the last one seen (RTC and prefs `last_city`).
 - `name` is stored and applied when it differs from prefs `name`.
+- `skies` and `creatures` (comma lists, e.g. `"tapir,tiger"`) are stored in prefs `skies` / `creatures` and passed to the core; a newly owned creature hatches from an egg and becomes the shown one.
 - `now` (UTC) sets the core clock, converted to local with the stored timezone, until SNTP has synced. After that the badge re-anchors to system time once a minute.
 
 ### Telemetry
@@ -134,7 +136,7 @@ What the badge does with it:
 The badge prints one JSON line per second on serial, and once a minute while awake (never on the first poll of a wake) POSTs the latest line as `Content-Type: application/json` with the header `X-Badge-Key: <prefs token>` to `<base>/api/c/<slug>/telemetry`. The server stores anything that parses as a JSON object up to 2048 bytes when the key matches the badge's `deviceKey`; a wrong or missing key is a 401, a badge without a key on the server is a 503. `GET ...?n=100` reads the latest rows back for the admin, the owning speaker or the same header.
 
 ```json
-{"t":123456,"fps":30,"frame_ms":1.52,"push_ms":1.20,"rows":130,"heap":198000,"screen":1,"hearts":3,"wifi":"ok","rssi":-61}
+{"t":123456,"fps":30,"frame_ms":1.52,"push_ms":1.20,"rows":130,"heap":198000,"screen":1,"hearts":3,"wifi":"ok","rssi":-61,"creature":"tiger","sky":"kl"}
 ```
 
 `t` is `millis()`, `fps` counts loop passes that pushed pixels, `frame_ms` is tick plus render plus push averaged over the second, `push_ms` is convert plus SPI, `rows` is the largest dirty span pushed, `screen` is `enum cz_screen`, `wifi` is `off`, `connecting`, `ok` or `fail`. The numbers in the example are illustrative; no real device line has been captured yet.
