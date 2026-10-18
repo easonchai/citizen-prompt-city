@@ -20,7 +20,8 @@ extern "C" {
 
 enum cz_creature { CZ_TAPIR = 0, CZ_HORNBILL = 1, CZ_TIGER = 2, CZ_CREATURES = 3 };
 enum cz_pose { CZ_IDLE, CZ_BLINK, CZ_EAT, CZ_PLAY, CZ_SLEEP, CZ_SULK, CZ_TALK, CZ_CHEER, CZ_POSES };
-enum cz_screen { CZ_S_HATCH, CZ_S_HOME, CZ_S_FEED, CZ_S_PLAY, CZ_S_TALK, CZ_S_QR, CZ_S_CHECKIN, CZ_S_SULK, CZ_S_SLEEP, CZ_S_SETTINGS, CZ_SCREENS };
+enum cz_screen { CZ_S_HATCH, CZ_S_HOME, CZ_S_FEED, CZ_S_PLAY, CZ_S_TALK, CZ_S_QR, CZ_S_CHECKIN, CZ_S_SULK, CZ_S_SLEEP,
+                 CZ_S_SETTINGS, CZ_S_EGG, CZ_S_WIFI, CZ_S_PORTAL, CZ_SCREENS };
 enum cz_touch { CZ_TOUCH_DOWN = 0, CZ_TOUCH_MOVE = 1, CZ_TOUCH_UP = 2 };
 
 /* Palette indices used by the framebuffer and the sprites. 0 is transparent in sprites only. */
@@ -38,7 +39,7 @@ void cz_tick(uint32_t now_ms);
 void cz_touch(int kind, int x, int y, uint32_t now_ms);   /* raw touch; core detects tap, swipe, hold */
 
 /* Content the host sets. */
-void cz_set_creature(int creature);
+void cz_set_creature(int creature);            /* also owned from now on (cz_creatures) */
 void cz_set_portrait(int on);                 /* web page portrait: Home without hearts or actions, ignores touch, never sleeps */
 void cz_set_name(const char *name);           /* shown in gold under the pet, uppercase, <= 10 chars */
 void cz_set_prompt(const char *prompt);       /* the speaker's system prompt, typed out on Hatch */
@@ -83,8 +84,25 @@ enum cz_wifi_state { CZ_WIFI_OFF = 0, CZ_WIFI_CONNECTING, CZ_WIFI_OK, CZ_WIFI_FA
 void cz_set_version(const char *running);      /* e.g. "1.1.0" */
 void cz_set_update(const char *available);     /* "" or NULL = up to date */
 void cz_set_wifi(const char *ssid, int state);
-enum cz_request { CZ_REQ_NONE = 0, CZ_REQ_PORTAL, CZ_REQ_CHECK_UPDATE, CZ_REQ_INSTALL_UPDATE, CZ_REQ_FACTORY_RESET };
+enum cz_request { CZ_REQ_NONE = 0, CZ_REQ_PORTAL, CZ_REQ_CHECK_UPDATE, CZ_REQ_INSTALL_UPDATE, CZ_REQ_FACTORY_RESET,
+                  CZ_REQ_SYNC, CZ_REQ_WIFI_FORGET };
 int  cz_host_request(void);                    /* returns one pending request and clears it */
+
+/* Creatures the citizen owns (bit per enum cz_creature), from the server's /state. 0 is ignored (nothing known).
+ * A newly owned creature hatches from an egg (CZ_S_EGG) and becomes the shown one; Settings > Citizen steps
+ * through owned creatures only. The mask is saved in the blob, so a boot re-apply is not new. */
+void     cz_set_creatures(unsigned mask);
+unsigned cz_creatures(void);
+
+/* WiFi sub-screen. The host passes its saved networks, '\n'-separated, at most CZ_WIFI_NETS SSIDs of <= 32 bytes;
+ * the core lists them, then ADD NETWORK, then BACK. Forget asks CZ_REQ_WIFI_FORGET; read which with cz_wifi_forget(). */
+#define CZ_WIFI_NETS 5
+void cz_set_wifi_list(const char *ssids);
+int  cz_wifi_forget(void);                 /* index into the list last passed, -1 if none pending */
+
+/* Portal screen: a QR to join the badge's own access point, "WIFI:T:nopass;S:<ap>;;", plus "192.168.4.1".
+ * ap = "" or NULL leaves it. */
+void cz_portal(const char *ap);
 
 /* Introspection for the simulator and tests. */
 int  cz_screen(void);

@@ -112,7 +112,8 @@ static double wall_s(void) {
 }
 
 int main(void) {
-    static const char *const names[CZ_SCREENS] = {"hatch", "home", "feed", "play", "talk", "qr", "checkin", "sulk", "sleep", "settings"};
+    static const char *const names[CZ_SCREENS] = {"hatch", "home", "feed", "play", "talk", "qr", "checkin", "sulk", "sleep", "settings", "egg", "wifi",
+                                                  "portal"};
     double t0 = wall_s();
     uint32_t sec, hour = 0, next_msg = 1200000;
     int s;

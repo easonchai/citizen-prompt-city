@@ -181,6 +181,15 @@ int cz_anim(int screen, uint32_t t, uint32_t screen_ms) {
     case CZ_S_TALK: return (s & 1) | ((int)(t / 500) & 1) << 1;                 /* bob, cursor off */
     case CZ_S_SLEEP: return (int)(t / 1200) & 3;                                /* slow breath, zz drift */
     case CZ_S_QR: return (int)(t / 1200) & 1;
+    case CZ_S_EGG: /* 0 still, 1-6 wobble (3 swings x 2 sides), 7-10 crack, 11-13 burst, 16-19 reveal bob */
+        if (screen_ms >= 2800) return 16 | ((int)(t / 600) & 3);
+        if (screen_ms >= 2400) return 11 + (int)((screen_ms - 2400) / 134);
+        if (screen_ms >= 1800) return 7 + (int)((screen_ms - 1800) / 150);
+        for (c = 0; c < 3; c++) {
+            static const uint16_t at[3] = {0, 700, 1300};
+            if (screen_ms >= at[c] && screen_ms < at[c] + 300u) return 1 + 2 * c + (int)((screen_ms - at[c]) / 75 & 1);
+        }
+        return 0;
     default: return 0;
     }
 }
@@ -192,6 +201,7 @@ static const uint8_t ANIM_BOX[CZ_SCREENS][4] = {
     [CZ_S_TALK] = {56, 36, 194, 174},    /* + the bubble interior, where the cursor blinks */
     [CZ_S_CHECKIN] = {48, 30, 196, 188}, /* sprite sits at y 60..187 above the band, + both confetti patterns */
     [CZ_S_QR] = {0, 120, 74, 186},       /* the 1x pet left of the panel, for every QR version */
+    [CZ_S_EGG] = {0, 0, 240, 240},       /* every beat redraws the whole screen */
 };
 
 void cz_anim_box(int screen, int *x, int *y, int *w, int *h) {
@@ -289,23 +299,64 @@ static void talk(const struct cz_view *v) {
 }
 
 /* QR (PRD 2.4): 6 px modules for version <= 2, 5 px for version 3, a 2-module cream quiet zone, panel centred
- * across and resting on the gold band so the finder corners stay inside the round glass. */
-static void qr(const struct cz_view *v) {
+ * across and resting on the gold band so the finder corners stay inside the round glass.
+ * pet >= 0 peeks from behind the panel. Text too long for version 5 draws no code; the banner still shows. */
+static void qr_panel(const char *text, int pet, int bob) {
     static uint8_t code[qrcodegen_BUFFER_LEN_FOR_VERSION(5)], tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(5)];
-    char with[24];
     skyline(); cz_dim(75);
     /* LOW + boost: the smallest version, with the ECC raised when it still fits; a lit screen does not smudge */
-    if (qrcodegen_encodeText(v->url, tmp, code, qrcodegen_Ecc_LOW, 1, 5, qrcodegen_Mask_AUTO, true)) {
+    if (qrcodegen_encodeText(text, tmp, code, qrcodegen_Ecc_LOW, 1, 5, qrcodegen_Mask_AUTO, true)) {
         int n = qrcodegen_getSize(code), m = n <= 25 ? 6 : n <= 29 ? 5 : 4; /* 4 px only for long custom base URLs */
         int p = (n + 4) * m, px = (CZ_W - p) / 2, py = 188 - p, ox = px + 2 * m, oy = py + 2 * m, r, c;
-        cz_blit(cz_sprite(v->creature, CZ_IDLE), px - 36, 120 + v->anim, 1, 0); /* small pet peeks from behind the panel */
+        if (pet >= 0) cz_blit(cz_sprite(pet, CZ_IDLE), px - 36, 120 + bob, 1, 0);
         cz_rect(px, py, p, p, CZ_C_INK);
         for (r = 0; r < n; r++)
             for (c = 0; c < n; c++)
                 if (qrcodegen_getModule(code, c, r)) cz_rect(ox + c * m, oy + r * m, m, m, CZ_C_DEEP);
-    } /* a URL too long for version 5 draws no code; the banner still shows */
+    }
+}
+
+static void qr(const struct cz_view *v) {
+    char with[24];
+    qr_panel(v->url, v->creature, v->anim);
     cat(with, sizeof with, "CHAT WITH ", v->name);
     banner(with, "CONNECT.PRMPT.CITY"); /* the brand and the fallback for anyone who cannot scan */
+}
+
+/* Portal: a phone camera joins the badge's own access point from this code */
+static void portal(const struct cz_view *v) {
+    char wifi[48], join[32];
+    cat(wifi, sizeof wifi, "WIFI:T:nopass;S:", v->ap);
+    cat(wifi, sizeof wifi, wifi, ";;");
+    qr_panel(wifi, -1, 0);
+    cat(join, sizeof join, "JOIN ", v->ap);
+    cz_rect(0, 188, CZ_W, 52, CZ_C_GOLD);
+    cz_text(join, CX, 194, CZ_C_DEEP, cz_text_width(join, 3) <= CZ_W ? 3 : 2, CZ_CENTER);
+    cz_text("192.168.4.1", CX, 212, CZ_C_DEEP, 2, CZ_CENTER);
+}
+
+/* Egg (hatch.md, Badge): an ink oval in 4 px rows that wobbles, cracks, bursts, then the new creature */
+static void egg(const struct cz_view *v) {
+    static const uint8_t half[20] = {10, 16, 20, 23, 25, 27, 28, 29, 30, 31, 32, 32, 32, 31, 30, 29, 27, 24, 20, 13};
+    static const uint8_t spots[4][2] = {{102, 96}, {130, 88}, {112, 140}, {136, 128}};
+    static const int8_t ray[8][2] = {{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
+    int a = v->anim, dx = 0, i, x;
+    skyline(); cz_dim(60);
+    if (a >= 16) { /* reveal */
+        sprite(v, 56, 44 + BOB[a & 3]);
+        banner("NEW CITIZEN", v->name);
+        return;
+    }
+    if (a >= 1 && a <= 6) dx = ((a - 1) / 2 + 1) * 2 * ((a - 1) & 1 ? -1 : 1); /* +-2, +-4, +-6 */
+    for (i = 0; i < 20; i++) cz_rect(CX + dx - half[i], 80 + 4 * i, 2 * half[i], 4, CZ_C_INK);
+    for (i = 0; i < 4; i++) cz_rect(spots[i][0] + dx, spots[i][1], 8, 6, i & 1 ? CZ_C_CORAL : CZ_C_GOLD);
+    if (a >= 7) /* the crack: 8 zig-zag segments across the middle, 2 more per step */
+        for (i = 0, x = 88; i < (a >= 11 ? 8 : 2 * (a - 6)); i++, x += 8) line2(x, i & 1 ? 124 : 116, x + 8, i & 1 ? 116 : 124, CZ_C_DEEP);
+    if (a >= 11) { /* burst: 8 gold spokes growing in 3 steps, a ring flash */
+        int len = 24 * (a - 10);
+        for (i = 0; i < 8; i++) line2(CX, 120, CX + ray[i][0] * len, 120 + ray[i][1] * len, CZ_C_GOLD);
+        ring2(CX, 120, len + 8, CZ_C_PALE);
+    }
 }
 
 static void cheer(const struct cz_view *v) {
@@ -367,14 +418,16 @@ static void settings(const struct cz_view *v) {
     if (v->set_arrows & 2) arrow(204, 106, 1);
     cz_text(v->set_next, CX, 140, CZ_C_INK, 2, CZ_CENTER);
     tri(160, 0);
-    banner("SETTINGS", 0);
+    banner(v->screen == CZ_S_WIFI ? "WIFI" : "SETTINGS", 0);
 }
 
 void cz_draw(const struct cz_view *v) {
     phase = v->phase;
     sky = v->sky;
     switch (v->screen) {
-    case CZ_S_SETTINGS: settings(v); break;
+    case CZ_S_SETTINGS: case CZ_S_WIFI: settings(v); break;
+    case CZ_S_EGG: egg(v); break;
+    case CZ_S_PORTAL: portal(v); break;
     case CZ_S_HATCH: hatch(v); break;
     case CZ_S_FEED: eat(v); break;
     case CZ_S_PLAY: play(v); break;

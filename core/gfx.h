@@ -33,6 +33,7 @@ struct cz_view {
     int set_arrows;                                   /* Settings value row: bit 0 draws the left arrow, bit 1 the right */
     int portrait;                                     /* Home as a portrait: no hearts, no action icons */
     int sky;                                          /* enum cz_sky: the city behind the pet */
+    const char *ap;                                   /* Portal: the badge's access point name */
 };
 void cz_draw(const struct cz_view *v);
 

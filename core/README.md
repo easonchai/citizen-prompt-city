@@ -96,7 +96,12 @@ Everything the host may call is in `citizen.h`, all prefixed `cz_`. The Makefile
 | `void cz_set_version(const char *running)` | Up to 15 bytes, e.g. "1.1.0". Shown on the Update and About rows. |
 | `void cz_set_update(const char *available)` | A newer version string, or "" or NULL for up to date. Changes what the Update row does when activated. |
 | `void cz_set_wifi(const char *ssid, int state)` | SSID up to 32 bytes plus `CZ_WIFI_OFF`, `CZ_WIFI_CONNECTING`, `CZ_WIFI_OK` or `CZ_WIFI_FAIL`. Shown on the WiFi row. |
-| `int cz_host_request(void)` | Pops one pending request: `CZ_REQ_PORTAL`, `CZ_REQ_CHECK_UPDATE`, `CZ_REQ_INSTALL_UPDATE` or `CZ_REQ_FACTORY_RESET`, lowest first; `CZ_REQ_NONE` when empty. Nothing in the core raises `CZ_REQ_FACTORY_RESET` today. |
+| `int cz_host_request(void)` | Pops one pending request: `CZ_REQ_PORTAL`, `CZ_REQ_CHECK_UPDATE`, `CZ_REQ_INSTALL_UPDATE`, `CZ_REQ_FACTORY_RESET`, `CZ_REQ_SYNC` or `CZ_REQ_WIFI_FORGET`, lowest first; `CZ_REQ_NONE` when empty. Nothing in the core raises `CZ_REQ_FACTORY_RESET` today. |
+| `void cz_set_creatures(unsigned mask)` | Owned creatures from the server (bit per `enum cz_creature`; 0 is ignored). A gained bit plays Egg for the highest gained creature (after Hatch or Portal if one is showing); otherwise, if the shown creature is no longer owned, it switches to the lowest owned one at once. `cz_set_creature` also marks its creature owned. Saved in the blob. |
+| `unsigned cz_creatures(void)` | The owned mask. |
+| `void cz_set_wifi_list(const char *ssids)` | The host's saved networks, `\n`-separated, at most `CZ_WIFI_NETS` (5) of up to 32 bytes, listed on the WiFi screen. |
+| `int cz_wifi_forget(void)` | After `CZ_REQ_WIFI_FORGET`: the index into the last list to forget, then -1. |
+| `void cz_portal(const char *ap)` | Shows Portal for that access point name; "" or NULL leaves it to the base screen. |
 
 ### Introspection
 
@@ -141,6 +146,9 @@ Ten screens, `enum cz_screen`. Home and Sulk are the two resting screens; which 
 | `CZ_S_CHECKIN` | `cz_checkin()`. | 4 s, or a tap. |
 | `CZ_S_SLEEP` | 30 s idle on Home or Sulk. `cz_wants_sleep()` is 1 here. | A tap. The host usually deep sleeps instead and re-inits on wake. |
 | `CZ_S_SETTINGS` | Double tap on Home or Sulk (a first tap that fed the pet is undone). | Hold, double tap, the Exit row, or 20 s idle. |
+| `CZ_S_EGG` | `cz_set_creatures` gains a creature. Wobble, crack, burst, then at 2.8 s the new creature with its default name. | 4 s. A tap before 2.8 s jumps to the reveal, after it ends Egg. Messages and check-ins are dropped; it never sleeps. |
+| `CZ_S_WIFI` | Settings, WIFI row. Rows: each saved SSID, ADD NETWORK (raises `CZ_REQ_PORTAL`), BACK. A centre/right tap on an SSID arms TAP TO FORGET; a second one at least 400 ms later raises `CZ_REQ_WIFI_FORGET`. | BACK, hold or 20 s idle return to Settings on the WiFi row. |
+| `CZ_S_PORTAL` | `cz_portal(ap)`: a QR of `WIFI:T:nopass;S:<ap>;;`, banner JOIN <ap> / 192.168.4.1. | Only `cz_portal("")`. Taps, messages and check-ins do nothing; it never sleeps. |
 
 A tap on any event screen (Feed, Play, Talk, QR, Check-in, Sleep) dismisses it to the base screen. Talk and Check-in interrupt whatever is showing, Settings and Sleep included.
 
@@ -218,7 +226,7 @@ The same table lives in `tools/pack_sprites.py`, which quantises the PNG sprites
 | Offset | Size | Field |
 |---|---|---|
 | 0 | 2 | Magic `'C'`, `'Z'` |
-| 2 | 1 | Version, 3. Version 2 blobs (pre-clock firmware) still restore with timezone 8 and clock unknown. |
+| 2 | 1 | Version, 5. Version 2 blobs (pre-clock firmware) still restore with timezone 8 and clock unknown; versions 2-4 own only their creature. |
 | 3 | 1 | Creature, 0..2 |
 | 4 | 1 | Hearts, 0..4 |
 | 5 | 1 | Hatched flag |
@@ -229,7 +237,11 @@ The same table lives in `tools/pack_sprites.py`, which quantises the PNG sprites
 | 16 | 11 | Name, NUL terminated, at most 10 characters (byte 26 is always 0) |
 | 27 | 1 | Timezone + 12, so 0..26 |
 | 28 | 4 | Seconds since local midnight, or `0xFFFFFFFF` when the clock is unknown |
-| 32 | 28 | Zero |
+| 32 | 1 | Chosen sky (v4) |
+| 33 | 1 | Screen always on (v4) |
+| 34 | 1 | Unlocked skies mask (v4) |
+| 35 | 1 | Owned creatures mask (v5); must hold byte 3's bit |
+| 36 | 24 | Zero |
 | 60 | 4 | FNV-1a checksum of bytes 0..59 |
 
 `restore` rejects a blob when the magic, version, checksum or any range check fails, and `cz_init` then hatches a fresh pet. The firmware reads the name straight out of bytes 16..26 because the core has no name getter.
@@ -277,7 +289,7 @@ Two things to read from it: the SPI push of a full frame costs more than any scr
 
 ## Settings wheel
 
-Opened by a double tap on Home or Sulk. A vertical wheel of eight rows: the previous row in ink at y 48, the selected row and its value in gold at y 84 and 108, the next row at y 140, with triangles above and below. Rows in order: BRIGHTNESS, CLOCK, TIMEZONE, CITIZEN, WIFI, UPDATE, ABOUT, EXIT. The wheel wraps.
+Opened by a double tap on Home or Sulk. A vertical wheel of eleven rows: the previous row in ink at y 48, the selected row and its value in gold at y 84 and 108, the next row at y 140, with triangles above and below. Rows in order: BRIGHTNESS, SCREEN, CLOCK, TIMEZONE, CITIZEN, SKY, WIFI, SYNC, UPDATE, ABOUT, EXIT. The wheel wraps.
 
 Touch zones, from `settings_tap`:
 
@@ -293,15 +305,16 @@ Touch zones, from `settings_tap`:
 | Hold 1 s | Leave |
 | 20 s idle | Leave |
 
-A value tap is held for 400 ms before it applies so a double tap can cancel it. Arrows on the value row show which directions are live: both for Brightness, Clock, Timezone and Citizen; right only for WiFi, Update and Exit; none for About.
+A value tap is held for 400 ms before it applies so a double tap can cancel it. Arrows on the value row show which directions are live: both for Brightness, Clock, Timezone and Citizen; right only for WiFi, Sync, Update and Exit; none for About.
 
 | Row | Value shown | Back | Forward |
 |---|---|---|---|
 | BRIGHTNESS | 10, 40 or 100 | Dimmer, stops at 10 | Brighter, stops at 100 |
 | CLOCK | HH:MM or `--:--` | Back 15 min (to the previous quarter hour) | Forward to the next quarter hour. Either sets the clock to known. |
 | TIMEZONE | UTC+8 style | -1 h, floor -12 | +1 h, ceiling 14. The local clock moves with it. |
-| CITIZEN | TENUK, KENYALANG or HARIMAU | Previous creature | Next creature. Changes the name to the default. |
-| WIFI | NOT SET, or the SSID plus OFF, CONNECTING, OK or FAIL | nothing | Raises `CZ_REQ_PORTAL` |
+| CITIZEN | TENUK, KENYALANG or HARIMAU | Previous owned creature | Next owned creature. Changes the name to the default; with one owned it does not move. |
+| WIFI | NOT SET, or the SSID plus OFF, CONNECTING, OK or FAIL | nothing | Opens the WiFi screen |
+| SYNC | TAP TO SYNC, or SYNCING until the host next calls `cz_set_wifi` | nothing | Raises `CZ_REQ_SYNC` |
 | UPDATE | V<running> then NEW <version> or UP TO DATE | nothing | Raises `CZ_REQ_CHECK_UPDATE`, or `CZ_REQ_INSTALL_UPDATE` once the host has reported a newer version |
 | ABOUT | V<running> and the last path segment of the QR URL (the slug) | nothing | nothing |
 | EXIT | | nothing | Leave Settings |

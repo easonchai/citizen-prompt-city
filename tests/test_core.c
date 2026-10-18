@@ -4,6 +4,7 @@
 #include <string.h>
 #include "citizen.h"
 #include "gfx.h" /* cz_anim_box, cz_blit for the animation tests */
+#include "qrcodegen.h" /* to check the Portal's code */
 
 static uint32_t now;
 static int fails;
@@ -267,7 +268,7 @@ static void test_brightness(void) {
     CHECK(cz_brightness() == 100);
     cz_set_brightness(10);
     CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
-    CHECK(blob[2] == 4);
+    CHECK(blob[2] == 5);
     cz_init(0, blob, sizeof blob, 0);
     CHECK(cz_brightness() == 10);
     CHECK(cz_screen() != CZ_S_HATCH);
@@ -282,6 +283,7 @@ static void swipe(int dir) {
     now += 400;
 }
 
+static void quick_tap_at(int x, int y) { cz_touch(CZ_TOUCH_DOWN, x, y, now); now += 100; cz_touch(CZ_TOUCH_UP, x + 1, y, now); }
 static void hold(void) { cz_touch(CZ_TOUCH_DOWN, 120, 120, now); run(1100); cz_touch(CZ_TOUCH_UP, 120, 120, now); now += 400; }
 /* a tap at a place on the screen, then the pause that lets a Settings value tap apply */
 static void tap_at(int x, int y) { cz_touch(CZ_TOUCH_DOWN, x, y, now); now += 100; cz_touch(CZ_TOUCH_UP, x + 1, y, now); run(450); }
@@ -322,16 +324,19 @@ static void test_settings(void) {
     left(); CHECK(cz_timezone() == 8);
     vswipe(-1); vswipe(-1); vswipe(-1);      /* swipe up three times: Citizen, Sky, WiFi */
     CHECK(cz_host_request() == CZ_REQ_NONE);
-    right(); CHECK(cz_host_request() == CZ_REQ_PORTAL); CHECK(cz_host_request() == CZ_REQ_NONE);
-    tap_at(120, 100);                        /* a centre tap also activates */
-    CHECK(cz_host_request() == CZ_REQ_PORTAL);
+    right(); CHECK(cz_screen() == CZ_S_WIFI); CHECK(cz_host_request() == CZ_REQ_NONE); /* WiFi opens its list */
+    right(); CHECK(cz_host_request() == CZ_REQ_PORTAL); CHECK(cz_host_request() == CZ_REQ_NONE); /* no networks: ADD NETWORK */
+    down(); right(); CHECK(cz_screen() == CZ_S_SETTINGS);   /* BACK, onto the WiFi row */
+    tap_at(120, 100); CHECK(cz_screen() == CZ_S_WIFI);      /* a centre tap also activates */
+    hold(); CHECK(cz_screen() == CZ_S_SETTINGS);            /* hold goes back too */
+    down();                                  /* Sync */
     down();                                  /* Update: check, then install once the host reports one */
     right(); CHECK(cz_host_request() == CZ_REQ_CHECK_UPDATE);
     cz_set_version("1.1.0"); cz_set_update("1.2.0");
     right(); CHECK(cz_host_request() == CZ_REQ_INSTALL_UPDATE); CHECK(cz_host_request() == CZ_REQ_NONE);
     check_and_write("settings_update");
-    vswipe(1);                               /* swipe down goes back up the wheel: WiFi */
-    right(); CHECK(cz_host_request() == CZ_REQ_PORTAL);
+    vswipe(1); vswipe(1);                    /* swipe down goes back up the wheel: Sync, WiFi */
+    right(); CHECK(cz_screen() == CZ_S_WIFI); hold();
     up(); up(); up(); up(); up(); up();      /* Sky, Citizen, Timezone, Clock, Screen, Brightness */
     left(); CHECK(cz_brightness() == 40);
     CHECK(cz_screen() == CZ_S_SETTINGS);
@@ -342,7 +347,7 @@ static void test_settings(void) {
     run(200); CHECK(cz_screen() == CZ_S_HOME); /* 20 s idle exits */
 
     quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS);
-    for (i = 0; i < 9; i++) down();          /* down nine times reaches Exit */
+    for (i = 0; i < 10; i++) down();         /* down ten times reaches Exit */
     CHECK(cz_screen() == CZ_S_SETTINGS);
     right(); CHECK(cz_screen() == CZ_S_HOME);
 
@@ -649,6 +654,143 @@ static void test_skies(void) {
     }
 }
 
+/* the save blob checksum (FNV-1a over all but the last 4 bytes), for tests that edit a blob */
+static void reseal(uint8_t *blob) {
+    uint32_t h = 2166136261UL;
+    int k;
+    for (k = 0; k < CZ_SAVE_SIZE - 4; k++) { h ^= blob[k]; h *= 16777619UL; }
+    blob[60] = (uint8_t)h; blob[61] = (uint8_t)(h >> 8); blob[62] = (uint8_t)(h >> 16); blob[63] = (uint8_t)(h >> 24);
+}
+
+static void open_settings(void) { quick_tap(); quick_tap(); CHECK(cz_screen() == CZ_S_SETTINGS); }
+
+/* Owned creatures: a new one hatches from an egg; Settings > Citizen steps through owned ones only. */
+static void test_creatures(void) {
+    const unsigned TAPIR = 1u << CZ_TAPIR, TIGER = 1u << CZ_TIGER;
+    int i, seen_hornbill = 0;
+    boot();
+    CHECK(cz_creature() == CZ_TAPIR && cz_creatures() == TAPIR);
+    cz_set_creatures(TAPIR); CHECK(cz_screen() == CZ_S_HOME);
+    open_settings(); down(); down(); down(); down();         /* Screen, Clock, Timezone, Citizen */
+    right(); CHECK(cz_creature() == CZ_TAPIR);               /* one owned: does not move */
+    hold(); CHECK(cz_screen() == CZ_S_HOME);
+
+    cz_tick(now);                                            /* the host ticks right up to the unlock */
+    cz_set_creatures(TAPIR | TIGER); CHECK(cz_screen() == CZ_S_EGG); /* tiger gained */
+    cz_message("HI"); CHECK(cz_screen() == CZ_S_EGG);       /* dropped while the egg plays */
+    run(300); check_and_write("egg_wobble");
+    run(1700); check_and_write("egg_crack");                 /* 2,000 ms */
+    run(600); check_and_write("egg_burst");                  /* 2,600 ms */
+    CHECK(cz_creature() == CZ_TAPIR);
+    run(200); CHECK(cz_creature() == CZ_TIGER);              /* 2,800 ms: the new creature, its default name */
+    check_and_write("egg_reveal");
+    run(1150); CHECK(cz_screen() == CZ_S_EGG);
+    run(50); CHECK(cz_screen() == CZ_S_HOME);                /* 4,000 ms */
+    CHECK(cz_creatures() == (TAPIR | TIGER));
+
+    open_settings(); down(); down(); down(); down();
+    for (i = 0; i < 4; i++) { right(); seen_hornbill |= cz_creature() == CZ_HORNBILL; }
+    CHECK(!seen_hornbill && cz_creature() == CZ_TIGER);      /* tiger, tapir, tiger, tapir, tiger: never hornbill */
+    left(); CHECK(cz_creature() == CZ_TAPIR);
+    hold();
+    cz_set_creatures(TAPIR | TIGER); CHECK(cz_screen() == CZ_S_HOME); /* the same mask again is not new */
+    cz_set_creatures(0); CHECK(cz_creatures() == (TAPIR | TIGER));    /* 0 is ignored */
+    cz_set_creatures(TIGER); CHECK(cz_screen() == CZ_S_HOME && cz_creature() == CZ_TIGER); /* switches, no egg */
+
+    cz_set_creatures(TIGER | 1u << CZ_HORNBILL); CHECK(cz_screen() == CZ_S_EGG);
+    run(500); tap(); CHECK(cz_screen() == CZ_S_EGG && cz_creature() == CZ_HORNBILL); /* a tap skips to the reveal */
+    tap(); CHECK(cz_screen() == CZ_S_HOME);                  /* and a second one ends it */
+
+    now = 1000; cz_init(0, NULL, 0, 0); cz_tick(now);        /* during the prompt Hatch the egg waits */
+    cz_set_creatures(TAPIR | TIGER); CHECK(cz_screen() == CZ_S_HATCH);
+    run(6000); CHECK(cz_screen() == CZ_S_EGG);
+    run(4100); CHECK(cz_screen() == CZ_S_HOME && cz_creature() == CZ_TIGER);
+}
+
+static void test_blob_v5(void) {
+    uint8_t blob[CZ_SAVE_SIZE];
+    boot();
+    cz_set_creatures(1u << CZ_TAPIR | 1u << CZ_HORNBILL);
+    run(4100); CHECK(cz_creature() == CZ_HORNBILL);
+    CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);
+    CHECK(blob[2] == 5 && blob[35] == (1u << CZ_TAPIR | 1u << CZ_HORNBILL));
+    cz_init(0, blob, sizeof blob, 0);
+    CHECK(cz_screen() == CZ_S_HOME && cz_creatures() == (1u << CZ_TAPIR | 1u << CZ_HORNBILL));
+    cz_set_creatures(1u << CZ_TAPIR | 1u << CZ_HORNBILL); CHECK(cz_screen() == CZ_S_HOME); /* boot re-apply is not new */
+
+    blob[2] = 4; blob[35] = 0; reseal(blob);                 /* a v4 blob: owns only its creature */
+    cz_init(0, blob, sizeof blob, 0);
+    CHECK(cz_screen() == CZ_S_HOME && cz_creature() == CZ_HORNBILL && cz_creatures() == 1u << CZ_HORNBILL);
+
+    blob[2] = 5; blob[35] = 1u << CZ_TAPIR; reseal(blob);    /* v5 whose mask misses the chosen creature */
+    cz_init(0, blob, sizeof blob, 0); CHECK(cz_screen() == CZ_S_HATCH);
+    blob[35] = 1u << CZ_CREATURES | 1u << CZ_HORNBILL; reseal(blob); /* or names a creature that does not exist */
+    cz_init(0, blob, sizeof blob, 0); CHECK(cz_screen() == CZ_S_HATCH);
+}
+
+static void test_wifi_screen(void) {
+    boot();
+    cz_set_wifi("PromptKL", CZ_WIFI_OK);
+    cz_set_wifi_list("PromptKL\nHome");
+    open_settings(); vswipe(-1); vswipe(-1); vswipe(-1); vswipe(-1); vswipe(-1); vswipe(-1); /* ... WiFi */
+    right(); CHECK(cz_screen() == CZ_S_WIFI);
+    check_and_write("wifi_list");                            /* PromptKL CONNECTED, above BACK, below Home */
+    down(); right();                                         /* Home: arm */
+    check_and_write("wifi_forget");                          /* TAP TO FORGET */
+    CHECK(cz_host_request() == CZ_REQ_NONE && cz_wifi_forget() == -1);
+    right(); CHECK(cz_host_request() == CZ_REQ_WIFI_FORGET); /* confirm, 450 ms later */
+    CHECK(cz_wifi_forget() == 1 && cz_wifi_forget() == -1);
+    cz_set_wifi_list("PromptKL");                            /* the host answers with the shorter list */
+    CHECK(cz_screen() == CZ_S_WIFI);
+
+    cz_set_wifi_list("PromptKL\nHome");                     /* still on row 1: Home */
+    quick_tap_at(200, 100); now += 150; quick_tap_at(200, 100); /* a double tap: arms, then too soon to confirm */
+    CHECK(cz_host_request() == CZ_REQ_NONE);                 /* so it does not forget */
+    run(5100);
+    right(); CHECK(cz_host_request() == CZ_REQ_NONE);        /* 5 s disarmed it: this tap arms again */
+    up(); right(); CHECK(cz_host_request() == CZ_REQ_NONE);  /* moving the wheel disarms; PromptKL arms */
+    left(); right(); CHECK(cz_host_request() == CZ_REQ_NONE);/* a left tap disarms too */
+    down(); down(); CHECK(cz_screen() == CZ_S_WIFI);         /* Home, ADD NETWORK */
+    right(); CHECK(cz_host_request() == CZ_REQ_PORTAL);
+    down(); right(); CHECK(cz_screen() == CZ_S_SETTINGS);    /* BACK */
+    right(); CHECK(cz_screen() == CZ_S_WIFI);                /* back on the WiFi row */
+    run(20100); CHECK(cz_screen() == CZ_S_SETTINGS);         /* 20 s idle */
+}
+
+static void test_sync(void) {
+    boot();
+    open_settings(); vswipe(-1); vswipe(-1); vswipe(-1); vswipe(-1); vswipe(-1); vswipe(-1); vswipe(-1); /* Sync */
+    left(); CHECK(cz_host_request() == CZ_REQ_NONE);         /* right arrow only */
+    right(); CHECK(cz_host_request() == CZ_REQ_SYNC); CHECK(cz_host_request() == CZ_REQ_NONE);
+    check_and_write("settings_sync");                        /* SYNCING */
+    cz_set_wifi("PromptKL", CZ_WIFI_OK);                     /* the poll ended: TAP TO SYNC again */
+    CHECK(cz_screen() == CZ_S_SETTINGS);
+}
+
+static void test_portal(void) {
+    static uint8_t code[qrcodegen_BUFFER_LEN_FOR_VERSION(5)], tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(5)];
+    const char *want = "WIFI:T:nopass;S:CITIZEN-A1B2C3;;";
+    const uint8_t *fb;
+    int n, m, p, px, py, r, c, bad = 0;
+    boot();
+    cz_portal("CITIZEN-A1B2C3"); CHECK(cz_screen() == CZ_S_PORTAL);
+    check_and_write("portal");
+    CHECK(qrcodegen_encodeText(want, tmp, code, qrcodegen_Ecc_LOW, 1, 5, qrcodegen_Mask_AUTO, true));
+    n = qrcodegen_getSize(code);
+    CHECK(n == 25 || n == 29);                               /* version 2 or 3 */
+    m = n <= 25 ? 6 : 5; p = (n + 4) * m; px = (CZ_W - p) / 2; py = 188 - p;
+    fb = cz_framebuffer();
+    for (r = 0; r < n; r++)                                  /* every module on screen is the code for that text */
+        for (c = 0; c < n; c++)
+            bad += (fb[(py + 2 * m + r * m + m / 2) * CZ_W + px + 2 * m + c * m + m / 2] == CZ_C_DEEP) != qrcodegen_getModule(code, c, r);
+    printf("  portal qr: %d modules at %d px, %d wrong\n", n, m, bad);
+    CHECK(bad == 0);
+    tap(); hold(); quick_tap(); quick_tap(); run(60000);     /* taps, hold, time: still there, never sleeps */
+    CHECK(cz_screen() == CZ_S_PORTAL && !cz_wants_sleep());
+    cz_portal(""); CHECK(cz_screen() == CZ_S_HOME);     /* the host leaves it */
+    cz_portal("CITIZEN-A1B2C3"); cz_portal(NULL); CHECK(cz_screen() == CZ_S_HOME);
+}
+
 int main(void) {
     test_flow();
     test_save();
@@ -664,6 +806,11 @@ int main(void) {
     test_dither();
     test_hatch_rise();
     test_anim();
+    test_creatures();
+    test_blob_v5();
+    test_wifi_screen();
+    test_sync();
+    test_portal();
     if (fails) { printf("%d check(s) failed\n", fails); return 1; }
     test_double_tap_undoes_feed();
     printf("all core tests passed\n");

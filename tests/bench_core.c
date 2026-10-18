@@ -39,6 +39,7 @@ static void row(const char *name, double us, int rows) {
 }
 
 static void enter(int screen) {
+    int i;
     switch (screen) {
     case CZ_S_HATCH: now = 1000; cz_init(0, NULL, 0, 0); cz_tick(now); run(1500); break;
     case CZ_S_HOME: boot(); break;
@@ -56,6 +57,15 @@ static void enter(int screen) {
     case CZ_S_SULK: boot(); run(6UL * 3600000); tap(); break; /* asleep by then; the tap wakes it into Sulk */
     case CZ_S_SLEEP: boot(); run(30000); break;
     case CZ_S_SETTINGS: boot(); quick_tap(); quick_tap(); break; /* double tap */
+    case CZ_S_EGG: boot(); cz_set_creatures(7); break;   /* a new creature: the egg's first wobble */
+    case CZ_S_WIFI: /* Settings, up five rows (Exit, About, Update, Sync, WiFi), right tap opens the list */
+        boot(); cz_set_wifi_list("PromptKL\nHome"); quick_tap(); quick_tap(); now += 400;
+        for (i = 0; i < 6; i++) {
+            int x = i < 5 ? 120 : 200, y = i < 5 ? 40 : 100;
+            cz_touch(CZ_TOUCH_DOWN, x, y, now); now += 100; cz_touch(CZ_TOUCH_UP, x + 1, y, now); run(450);
+        }
+        break;
+    case CZ_S_PORTAL: boot(); cz_portal("CITIZEN-A1B2C3"); break;
     }
     if (cz_screen() != screen) { printf("bench: wanted screen %d, got %d\n", screen, cz_screen()); exit(1); }
 }
@@ -72,7 +82,8 @@ static void blink_phase0(void) {
 }
 
 int main(void) {
-    static const char *const names[CZ_SCREENS] = {"hatch", "home", "feed", "play", "talk", "qr", "checkin", "sulk", "sleep", "settings"};
+    static const char *const names[CZ_SCREENS] = {"hatch", "home", "feed", "play", "talk", "qr", "checkin", "sulk", "sleep", "settings", "egg", "wifi",
+                                                  "portal"};
     const char *env = getenv("CZ_SLOWDOWN");
     double t[RUNS], t0;
     int s, r, i, y0, y1, rows, frames;
