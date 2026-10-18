@@ -228,7 +228,8 @@ static void poll_serial();
 static String pref_base() { return prefs.getString("base", CZ_DEFAULT_BASE); }
 static String pref_slug() { return prefs.getString("slug", ""); }
 static String claim_url() { String slug = pref_slug(); return pref_base() + (slug.length() ? "/c/" + slug : String("/setup")); }
-static void set_qr() { cz_set_qr_url(claim_url().c_str()); }
+// ?ref=qr marks a scan of the badge (analytics qr_scan); Improv still reports the plain claim URL.
+static void set_qr() { cz_set_qr_url((claim_url() + (pref_slug().length() ? "?ref=qr" : "")).c_str()); }
 
 // --- F8 clock: system time is UTC epoch once SNTP has synced (0-based on cold boot until then). ---
 static bool time_valid() { return time(nullptr) > 1700000000; }
