@@ -65,7 +65,7 @@ static void enter(int screen) {
             cz_touch(CZ_TOUCH_DOWN, x, y, now); now += 100; cz_touch(CZ_TOUCH_UP, x + 1, y, now); run(450);
         }
         break;
-    case CZ_S_PORTAL: boot(); cz_portal("CITIZEN-A1B2C3", "48213075"); break;
+    case CZ_S_PORTAL: boot(); cz_portal("CITIZEN-A1B2C3", "K7QX3MZP9HTA"); break;
     }
     if (cz_screen() != screen) { printf("bench: wanted screen %d, got %d\n", screen, cz_screen()); exit(1); }
 }

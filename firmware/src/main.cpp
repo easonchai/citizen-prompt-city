@@ -642,8 +642,12 @@ static void run_portal() {
   portal_open = true;
   net_st = NET_OFF;  // the connect cycle pauses until the portal closes
   String ap = ap_name();
-  char pw[9];  // a fresh WPA2 password each time: the home WiFi password never crosses the air in the clear
-  snprintf(pw, sizeof pw, "%08lu", (unsigned long)(esp_random() % 100000000UL));
+  // a fresh WPA2 password each time (12 of 31 unambiguous characters, about 59 bits, too many to crack from a captured
+  // handshake inside the window): the home WiFi password never crosses the air in the clear
+  static const char abc[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  char pw[13];
+  for (int i = 0; i < 12; i++) pw[i] = abc[esp_random() % (sizeof abc - 1)];
+  pw[12] = 0;
   WiFi.mode(WIFI_AP_STA);  // AP for the phone, STA so it can scan
   WiFi.disconnect();       // a station retrying networks would move the AP's channel
   WiFi.softAP(ap.c_str(), pw);

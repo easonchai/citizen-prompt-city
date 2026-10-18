@@ -344,7 +344,7 @@ static void egg(const struct cz_view *v) {
     static const uint8_t half[20] = {10, 16, 20, 23, 25, 27, 28, 29, 30, 31, 32, 32, 32, 31, 30, 29, 27, 24, 20, 13};
     static const uint8_t spots[4][2] = {{102, 96}, {130, 88}, {112, 140}, {136, 128}};
     static const int8_t ray[8][2] = {{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
-    int a = v->anim, dx = 0, i, x;
+    int a = v->anim, dx = 0, i, x, up;
     skyline(); cz_dim(60);
     if (a >= 16) { /* reveal */
         sprite(v, 56, 44 + BOB[a & 3]);
@@ -352,15 +352,16 @@ static void egg(const struct cz_view *v) {
         return;
     }
     if (a >= 1 && a <= 6) dx = ((a - 1) / 2 + 1) * 2 * ((a - 1) & 1 ? -1 : 1); /* +-2, +-4, +-6 */
-    for (i = 0; i < 20; i++) cz_rect(CX + dx - half[i], 80 + 4 * i, 2 * half[i], 4, CZ_C_INK);
-    for (i = 0; i < 4; i++) cz_rect(spots[i][0] + dx, spots[i][1], 8, 6, i & 1 ? CZ_C_CORAL : CZ_C_GOLD);
-    if (a >= 7) /* the crack: 8 zig-zag segments across the middle, 2 more per step */
-        for (i = 0, x = 88; i < (a >= 11 ? 8 : 2 * (a - 6)); i++, x += 8) line2(x, i & 1 ? 124 : 116, x + 8, i & 1 ? 116 : 124, CZ_C_DEEP);
-    if (a >= 11) { /* burst: 8 gold spokes growing in 3 steps, a ring flash */
+    if (a >= 11) { /* burst: 8 gold spokes growing in 3 steps and a ring flash, behind the shell halves */
         int len = 24 * (a - 10);
         for (i = 0; i < 8; i++) line2(CX, 120, CX + ray[i][0] * len, 120 + ray[i][1] * len, CZ_C_GOLD);
         ring2(CX, 120, len + 8, CZ_C_PALE);
     }
+    up = a >= 13 ? 36 : a >= 11 ? 12 * (a - 10) : 0; /* the shell splits: top half lifts, bottom drops, light between */
+    for (i = 0; i < 20; i++) cz_rect(CX + dx - half[i], 80 + 4 * i + (i < 10 ? -up : up / 2), 2 * half[i], 4, CZ_C_INK);
+    for (i = 0; i < 4; i++) cz_rect(spots[i][0] + dx, spots[i][1] + (spots[i][1] < 120 ? -up : up / 2), 8, 6, i & 1 ? CZ_C_CORAL : CZ_C_GOLD);
+    if (a >= 7 && a < 11) /* the crack: 8 zig-zag segments across the middle, 2 more per step */
+        for (i = 0, x = 88; i < 2 * (a - 6); i++, x += 8) line2(x, i & 1 ? 124 : 116, x + 8, i & 1 ? 116 : 124, CZ_C_DEEP);
 }
 
 static void cheer(const struct cz_view *v) {

@@ -771,11 +771,11 @@ static void test_sync(void) {
 
 static void test_portal(void) {
     static uint8_t code[qrcodegen_BUFFER_LEN_FOR_VERSION(5)], tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(5)];
-    const char *want = "WIFI:T:WPA;S:CITIZEN-A1B2C3;P:48213075;;";
+    const char *want = "WIFI:T:WPA;S:CITIZEN-A1B2C3;P:K7QX3MZP9HTA;;";
     const uint8_t *fb;
     int n, m, p, px, py, r, c, bad = 0;
     boot();
-    cz_portal("CITIZEN-A1B2C3", "48213075"); CHECK(cz_screen() == CZ_S_PORTAL);
+    cz_portal("CITIZEN-A1B2C3", "K7QX3MZP9HTA"); CHECK(cz_screen() == CZ_S_PORTAL);
     check_and_write("portal");
     CHECK(qrcodegen_encodeText(want, tmp, code, qrcodegen_Ecc_LOW, 1, 5, qrcodegen_Mask_AUTO, true));
     n = qrcodegen_getSize(code);
@@ -790,7 +790,7 @@ static void test_portal(void) {
     tap(); hold(); quick_tap(); quick_tap(); run(60000);     /* taps, hold, time: still there, never sleeps */
     CHECK(cz_screen() == CZ_S_PORTAL && !cz_wants_sleep());
     cz_portal("", ""); CHECK(cz_screen() == CZ_S_HOME);     /* the host leaves it */
-    cz_portal("CITIZEN-A1B2C3", "48213075"); cz_portal(NULL, NULL); CHECK(cz_screen() == CZ_S_HOME);
+    cz_portal("CITIZEN-A1B2C3", "K7QX3MZP9HTA"); cz_portal(NULL, NULL); CHECK(cz_screen() == CZ_S_HOME);
 }
 
 int main(void) {

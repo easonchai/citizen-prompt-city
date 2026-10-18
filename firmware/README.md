@@ -102,7 +102,7 @@ Connect cycle, non-blocking so the pet keeps running: async scan, then try each 
 
 The captive portal (`run_portal`) opens from Settings > WiFi > ADD NETWORK, BOOT held 2 s once the screen is lit (holding it through power-on enters ROM download mode instead), or serial `portal`:
 
-1. A WPA2 access point `CITIZEN-XXXXXX` (the last three bytes of the soft-AP MAC) with a fresh random 8-digit password each time; the badge shows a QR that joins it, the password, and `192.168.4.1`.
+1. A WPA2 access point `CITIZEN-XXXXXX` (the last three bytes of the soft-AP MAC) with a fresh random 12-character password each time; the badge shows a QR that joins it, the password, and `192.168.4.1`.
 2. DNS answers every hostname with 192.168.4.1 and unknown paths redirect there, so phones open the page on join.
 3. The page lists the networks in range (strongest first, each once; `/?rescan=1` scans again) plus Other... for a typed name, and a password. Save validates (name 1-32, password up to 64) and adds the network. With 5 saved it says so and saves nothing.
 4. After a save the portal closes and the connect cycle starts; no restart. 5 minutes without a save closes it too.
