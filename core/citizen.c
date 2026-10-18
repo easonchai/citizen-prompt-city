@@ -422,7 +422,8 @@ void cz_set_portrait(int on) {
 void cz_set_creature(int creature) {
     if (creature < 0 || creature >= CZ_CREATURES) return;
     S.creature = creature;
-    S.creatures |= 1u << creature; /* the shown creature is always owned, so the save blob stays valid */
+    /* the shown creature is always owned, so the save blob stays valid; before Hatch ends the host is picking it */
+    S.creatures = (S.hatched ? S.creatures : 0) | 1u << creature;
     copy(S.name, sizeof S.name, DEFAULT_NAME[creature]); /* host calls cz_set_name afterwards for a custom name */
     S.stale = 1;
 }

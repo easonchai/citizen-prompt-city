@@ -702,6 +702,8 @@ static void test_creatures(void) {
     tap(); CHECK(cz_screen() == CZ_S_HOME);                  /* and a second one ends it */
 
     now = 1000; cz_init(0, NULL, 0, 0); cz_tick(now);        /* during the prompt Hatch the egg waits */
+    cz_set_creature(CZ_HORNBILL); cz_set_creature(CZ_TAPIR); /* the host picks a fresh pet: only that one is owned */
+    CHECK(cz_creatures() == TAPIR);
     cz_set_creatures(TAPIR | TIGER); CHECK(cz_screen() == CZ_S_HATCH);
     run(6000); CHECK(cz_screen() == CZ_S_EGG);
     run(4100); CHECK(cz_screen() == CZ_S_HOME && cz_creature() == CZ_TIGER);

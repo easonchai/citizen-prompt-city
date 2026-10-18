@@ -75,6 +75,10 @@ dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}dt{color:va
   <section>
     <h2>Content</h2>
     <label>Creature <select id="creature"><option value="0">Tapir</option><option value="1">Hornbill</option><option value="2">Tiger</option></select></label>
+    <div class="row">Owned (/state creatures):
+      <label class="inline"><input type="checkbox" data-creature="0"> Tapir</label>
+      <label class="inline"><input type="checkbox" data-creature="1"> Hornbill</label>
+      <label class="inline"><input type="checkbox" data-creature="2"> Tiger</label></div>
     <label>Name <input id="name" value="TENUK" maxlength="10"></label>
     <label>Prompt <textarea id="prompt">You are a skeptical ops lead who eats clean data.</textarea></label>
     <label>QR url <input id="qr" value="https://prmpt.city/c/tenuk"></label>
@@ -105,6 +109,7 @@ dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px}dt{color:va
     <label>Live mode: badge url (polls &lt;url&gt;/state every 10 s real time) <input id="liveurl" value="https://prmpt.city/api/c/tenuk"></label>
     <label class="inline"><input id="live" type="checkbox"> Live mode</label>
     <div id="wifistatus" class="legend"></div>
+    <button id="leaveportal" hidden>Leave portal</button>
   </section>
   <button id="nerd">Nerd</button>
   <section id="nerdpanel" hidden>

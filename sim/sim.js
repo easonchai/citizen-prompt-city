@@ -1,7 +1,7 @@
 import { frameCost, currentMa, syncMas, tempC, batteryHours } from './model.js';
 
-const SCREENS = ['HATCH','HOME','FEED','PLAY','TALK','QR','CHECKIN','SULK','SLEEP','SETTINGS'];
-const REQS = ['NONE','PORTAL','CHECK_UPDATE','INSTALL_UPDATE','FACTORY_RESET'];
+const SCREENS = ['HATCH','HOME','FEED','PLAY','TALK','QR','CHECKIN','SULK','SLEEP','SETTINGS','EGG','WIFI','PORTAL'];
+const REQS = ['NONE','PORTAL','CHECK_UPDATE','INSTALL_UPDATE','FACTORY_RESET','SYNC','WIFI_FORGET'];
 const POSES = ['IDLE','BLINK','EAT','PLAY','SLEEP','SULK','TALK','CHEER'];
 const W = 240, H = 240, NCOL = 15 /* CZ_C_COUNT */, SAVE_KEY = 'citizen-save';
 const STEP_MS = 1000 / 30; // the firmware loop runs at most 30 fps, so the core is ticked at that rate in sim time
@@ -34,6 +34,7 @@ const sim = {
   rate: 0, nextTap: Infinity, inGesture: false,
   scenario: null, end: Infinity,
   version: '1.1.0', updateAt: Infinity, nextClock: Infinity, note: '',
+  nets: ['PromptKL', 'Home'],                 // the firmware's saved networks (NVS ssid0..4), fed to the WiFi screen
 };
 const now = () => sim.ms >>> 0;
 const seed = () => (Math.random() * 2 ** 32) >>> 0;
@@ -54,7 +55,9 @@ function applyContent() {
 function applyHost() {
   withStr(cz.cz_set_version, sim.version);
   withStr(p => cz.cz_set_wifi(p, sim.wifi ? 2 : 0), 'PromptKL');
+  withStr(cz.cz_set_wifi_list, sim.nets.join('\n'));
 }
+const creaturesMask = () => [...document.querySelectorAll('[data-creature]')].reduce((m, c) => m | (c.checked ? 1 << +c.dataset.creature : 0), 0);
 // ---- badge clock: the core advances it from cz_tick; the host only sets it
 const clockMin = () => { const [h, m] = $('clock').value.split(':').map(Number); return (h * 60 + m) || 0; };
 function setClock(min) { $('clock').value = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`; cz.cz_set_clock(min); }
@@ -117,7 +120,9 @@ function coreFrame() {
   }
   for (let q; (q = cz.cz_host_request()); ) {
     sim.note = REQS[q] ?? String(q);
-    if (q === 1) sim.note += ': portal would start (simulated)';
+    if (q === 1) { sim.note += ': portal open (simulated)'; withStr(cz.cz_portal, 'CITIZEN-0A1B2C'); $('leaveportal').hidden = false; }
+    else if (q === 5) { sync(); if ($('live').checked) poll(); applyHost(); } // the poll ends with cz_set_wifi, which clears SYNCING
+    else if (q === 6) { const i = cz.cz_wifi_forget(); if (i >= 0) sim.nets.splice(i, 1); applyHost(); }
     else if (q === 2) sim.updateAt = sim.ms + 2000;
     else if (q === 3) { sim.note += ': would reboot into 1.1.1'; sim.version = '1.1.1'; withStr(cz.cz_set_version, sim.version); withStr(cz.cz_set_update, ''); }
   }
@@ -299,6 +304,8 @@ $('jump').onclick = () => advanceTo(sim.ms + 3600e3);
 $('speed').onchange = e => sim.speed = +e.target.value;
 $('rate').onchange = e => { sim.rate = Math.max(0, +e.target.value || 0); scheduleTap(); };
 $('creature').onchange = () => cz.cz_set_creature(+$('creature').value);
+document.querySelectorAll('[data-creature]').forEach(c => c.onchange = () => { const m = creaturesMask(); if (m) cz.cz_set_creatures(m); });
+$('leaveportal').onclick = () => { withStr(cz.cz_portal, ''); $('leaveportal').hidden = true; };
 $('bright').onchange = e => cz.cz_set_brightness(+e.target.value);
 $('apply').onclick = applyContent;
 $('send').onclick = () => withStr(cz.cz_message, $('msg').value);
@@ -459,6 +466,12 @@ function selftest() {
   w = performance.now(); runScenario('event'); advanceTo(sim.ms + 3600e3);
   r.event_day_1h = { ...summary(), syncs_per_h: sim.syncs, wakes_per_h: sim.wakes, wall_ms: Math.round(performance.now() - w) };
   const csv = toCsv(record).split('\n'); r.csv = { header: csv[0], rows: csv.length - 1 };
+  if (sim.power !== 'awake') wake();
+  // unlocking a creature hatches it: EGG, then Home with that creature
+  const owned = [...document.querySelectorAll('[data-creature]')], before = cz.cz_creature(), gain = (before + 1) % 3;
+  owned.forEach(c => c.checked = +c.dataset.creature === before || +c.dataset.creature === gain); owned[gain].onchange();
+  const egg = scr(); advanceTo(sim.ms + 4500);
+  r.unlock = { egg, after: scr(), creature: cz.cz_creature(), ok: egg === 'EGG' && cz.cz_creature() === gain };
   if (sim.power !== 'awake') wake();
   $('sleepmode').value = 'none'; // keep the radio up so the next periodic sync happens
   sim.pending.msg = 'hello from web'; const t0 = sim.ms; advanceTo(sim.nextSync + 1);
