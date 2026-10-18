@@ -100,9 +100,9 @@ unsigned cz_creatures(void);
 void cz_set_wifi_list(const char *ssids);
 int  cz_wifi_forget(void);                 /* index into the list last passed, -1 if none pending */
 
-/* Portal screen: a QR to join the badge's own access point, "WIFI:T:nopass;S:<ap>;;", plus "192.168.4.1".
- * ap = "" or NULL leaves it. */
-void cz_portal(const char *ap);
+/* Portal screen: a QR to join the badge's own access point, "WIFI:T:WPA;S:<ap>;P:<pass>;;", plus the password
+ * and "192.168.4.1". ap = "" or NULL leaves it. */
+void cz_portal(const char *ap, const char *pass);
 
 /* Introspection for the simulator and tests. */
 int  cz_screen(void);

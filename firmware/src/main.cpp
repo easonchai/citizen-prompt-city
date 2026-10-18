@@ -443,6 +443,43 @@ static int semver_cmp(const char *a, const char *b) {
   return 0;
 }
 
+// Every HTTPS call (state, telemetry, update check, OTA) trusts only ISRG Root X1, the Let's Encrypt root behind
+// connect.prmpt.city (leaf <- YR2 <- Root YR, cross-signed by X1). A custom base (serial "url") must be https with a
+// Let's Encrypt certificate, or put its root here. Expires 2035-06-04.
+static const char ROOT_CA[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "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\n"
+    "-----END CERTIFICATE-----\n";
+static WiFiClientSecure tls;  // setup() pins ROOT_CA on it
+
 // F11: GET <base>/api/firmware/latest -> {"version","url","sha256"}. Tells the core whether a newer build exists.
 static String update_url;
 static bool check_update() {
@@ -450,7 +487,7 @@ static bool check_update() {
   HTTPClient http;
   http.setTimeout(3000);
   bool ok = false;
-  if (http.begin(pref_base() + "/api/firmware/latest")) {
+  if (http.begin(tls, pref_base() + "/api/firmware/latest")) {
     if (http.GET() == 200) {
       String body = http.getString();
       char ver[16], url[200];
@@ -467,7 +504,6 @@ static bool check_update() {
 }
 
 // F11 OTA into the other app slot, then reboot. Prefs live in nvs, untouched by OTA.
-// shortcut: setInsecure() skips TLS cert checks (no CA bundle in V1); pin a CA bundle before wider release.
 // shortcut: latest.json's sha256 is not checked (HTTPUpdate streams straight into Update with no hash hook);
 // the ESP-IDF image header + appended SHA-256 are still validated by Update before the slot is switched.
 static void install_update() {
@@ -480,11 +516,9 @@ static void install_update() {
   cz_tick(millis());
   int y0, y1;
   if (cz_dirty_rows(&y0, &y1)) push_rows(y0, y1);
-  WiFiClientSecure client;
-  client.setInsecure();
   httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   httpUpdate.rebootOnUpdate(true);
-  t_httpUpdate_return r = httpUpdate.update(client, update_url, CZ_VERSION);
+  t_httpUpdate_return r = httpUpdate.update(tls, update_url, CZ_VERSION);
   if (r != HTTP_UPDATE_OK) {
     Serial.printf("update failed: %s\n", httpUpdate.getLastErrorString().c_str());
     cz_message("UPDATE FAILED");
@@ -508,7 +542,7 @@ static void wifi_poll() {
   if (slug.length()) {
     HTTPClient http;
     http.setTimeout(3000);
-    if (http.begin(api + "/state")) {
+    if (http.begin(tls, api + "/state")) {
       if (http.GET() == 200) {
         String body = http.getString();
         char buf[CZ_MSG_MAX], upd[sizeof rtc_last_upd];
@@ -556,7 +590,7 @@ static void wifi_poll() {
   }
   HTTPClient http;
   http.setTimeout(3000);
-  if (!first && slug.length() && tl_line[0] && http.begin(api + "/telemetry")) {  // F6: last F3 line, once a minute while awake
+  if (!first && slug.length() && tl_line[0] && http.begin(tls, api + "/telemetry")) {  // F6: last F3 line, once a minute while awake
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-Badge-Key", prefs.getString("token", ""));  // server answers 401 without it
     http.POST((uint8_t *)tl_line, strlen(tl_line));
@@ -608,9 +642,11 @@ static void run_portal() {
   portal_open = true;
   net_st = NET_OFF;  // the connect cycle pauses until the portal closes
   String ap = ap_name();
+  char pw[9];  // a fresh WPA2 password each time: the home WiFi password never crosses the air in the clear
+  snprintf(pw, sizeof pw, "%08lu", (unsigned long)(esp_random() % 100000000UL));
   WiFi.mode(WIFI_AP_STA);  // AP for the phone, STA so it can scan
   WiFi.disconnect();       // a station retrying networks would move the AP's channel
-  WiFi.softAP(ap.c_str());
+  WiFi.softAP(ap.c_str(), pw);
   DNSServer dns;
   dns.start(53, "*", WiFi.softAPIP());  // every hostname resolves to 192.168.4.1
   WebServer web(80);
@@ -648,7 +684,7 @@ static void run_portal() {
   });
   web.begin();
   Serial.printf("portal: join %s, open http://192.168.4.1\n", ap.c_str());
-  cz_portal(ap.c_str());
+  cz_portal(ap.c_str(), pw);
   int y0, y1;
   uint32_t t0 = millis();
   while (!saved && millis() - t0 < 5 * 60 * 1000UL) {
@@ -664,7 +700,7 @@ static void run_portal() {
   dns.stop();
   WiFi.softAPdisconnect(true);
   portal_open = false;
-  cz_portal("");
+  cz_portal("", "");
   net_list();
   wifi_connect();
 }
@@ -971,6 +1007,7 @@ void setup() {
   tl_t0 = millis();
 
 #if CZ_WIFI
+  tls.setCACert(ROOT_CA);
   wifi_begin();
   if (!pref_slug().length()) Serial.println("no slug: serial 'slug <s>' links this badge");
   // F5: BOOT held for 2 s right after boot opens the portal. Holding it *through* power-on puts the

@@ -34,6 +34,7 @@ struct cz_view {
     int portrait;                                     /* Home as a portrait: no hearts, no action icons */
     int sky;                                          /* enum cz_sky: the city behind the pet */
     const char *ap;                                   /* Portal: the badge's access point name */
+    const char *ap_pass;                              /* Portal: its WPA2 password */
 };
 void cz_draw(const struct cz_view *v);
 

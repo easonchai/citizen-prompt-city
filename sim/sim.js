@@ -120,7 +120,7 @@ function coreFrame() {
   }
   for (let q; (q = cz.cz_host_request()); ) {
     sim.note = REQS[q] ?? String(q);
-    if (q === 1) { sim.note += ': portal open (simulated)'; withStr(cz.cz_portal, 'CITIZEN-0A1B2C'); $('leaveportal').hidden = false; }
+    if (q === 1) { sim.note += ': portal open (simulated)'; withStr((p) => { mem().set(enc.encode('48213075\0'), p + 32); cz.cz_portal(p, p + 32); }, 'CITIZEN-0A1B2C'); $('leaveportal').hidden = false; }
     else if (q === 5) { sync(); if ($('live').checked) poll(); applyHost(); } // the poll ends with cz_set_wifi, which clears SYNCING
     else if (q === 6) { const i = cz.cz_wifi_forget(); if (i >= 0) sim.nets.splice(i, 1); applyHost(); }
     else if (q === 2) sim.updateAt = sim.ms + 2000;
@@ -305,7 +305,7 @@ $('speed').onchange = e => sim.speed = +e.target.value;
 $('rate').onchange = e => { sim.rate = Math.max(0, +e.target.value || 0); scheduleTap(); };
 $('creature').onchange = () => cz.cz_set_creature(+$('creature').value);
 document.querySelectorAll('[data-creature]').forEach(c => c.onchange = () => { const m = creaturesMask(); if (m) cz.cz_set_creatures(m); });
-$('leaveportal').onclick = () => { withStr(cz.cz_portal, ''); $('leaveportal').hidden = true; };
+$('leaveportal').onclick = () => { withStr((p) => cz.cz_portal(p, p), ''); $('leaveportal').hidden = true; };
 $('bright').onchange = e => cz.cz_set_brightness(+e.target.value);
 $('apply').onclick = applyContent;
 $('send').onclick = () => withStr(cz.cz_message, $('msg').value);

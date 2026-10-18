@@ -323,16 +323,20 @@ static void qr(const struct cz_view *v) {
     banner(with, "CONNECT.PRMPT.CITY"); /* the brand and the fallback for anyone who cannot scan */
 }
 
-/* Portal: a phone camera joins the badge's own access point from this code */
+/* Portal: a phone camera joins the badge's own WPA2 access point from this code, or types the password shown */
 static void portal(const struct cz_view *v) {
-    char wifi[48], join[32];
-    cat(wifi, sizeof wifi, "WIFI:T:nopass;S:", v->ap);
+    char wifi[72], join[32], pass[24];
+    cat(wifi, sizeof wifi, "WIFI:T:WPA;S:", v->ap);
+    cat(wifi, sizeof wifi, wifi, ";P:");
+    cat(wifi, sizeof wifi, wifi, v->ap_pass);
     cat(wifi, sizeof wifi, wifi, ";;");
     qr_panel(wifi, -1, 0);
     cat(join, sizeof join, "JOIN ", v->ap);
+    cat(pass, sizeof pass, "PASS ", v->ap_pass);
     cz_rect(0, 188, CZ_W, 52, CZ_C_GOLD);
-    cz_text(join, CX, 194, CZ_C_DEEP, cz_text_width(join, 3) <= CZ_W ? 3 : 2, CZ_CENTER);
-    cz_text("192.168.4.1", CX, 212, CZ_C_DEEP, 2, CZ_CENTER);
+    cz_text(join, CX, 191, CZ_C_DEEP, 2, CZ_CENTER);
+    cz_text(pass, CX, 204, CZ_C_DEEP, 2, CZ_CENTER);
+    cz_text("192.168.4.1", CX, 217, CZ_C_DEEP, 2, CZ_CENTER);
 }
 
 /* Egg (hatch.md, Badge): an ink oval in 4 px rows that wobbles, cracks, bursts, then the new creature */

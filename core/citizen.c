@@ -54,6 +54,7 @@ static struct {
     int syncing;             /* Settings SYNC was tapped; cleared by cz_set_wifi or leaving Settings */
     char nets[CZ_WIFI_NETS][33]; int nets_n, wsel, armed, forget; uint32_t armed_ms; /* WiFi sub-screen; armed: row + 1 */
     char ap[24];             /* Portal access point name */
+    char ap_pass[16];        /* and its WPA2 password */
     int tap_home; /* the last tap landed on Home or Sulk, so a quick second tap opens Settings */
     int tap_set;  /* the last tap landed on Settings, so a quick second tap leaves it */
     int portrait; /* the web page's portrait of the pet: not a device, so no hearts, touch or sleep */
@@ -474,8 +475,8 @@ void cz_set_wifi_list(const char *ssids) {
 }
 int cz_wifi_forget(void) { int i = S.forget; S.forget = -1; return i; }
 
-void cz_portal(const char *ap) {
-    if (ap && *ap) { copy(S.ap, sizeof S.ap, ap); go(CZ_S_PORTAL); }
+void cz_portal(const char *ap, const char *pass) {
+    if (ap && *ap) { copy(S.ap, sizeof S.ap, ap); copy(S.ap_pass, sizeof S.ap_pass, pass ? pass : ""); go(CZ_S_PORTAL); }
     else if (S.screen == CZ_S_PORTAL) { go(S.egg_wait ? CZ_S_EGG : base_screen()); S.egg_wait = 0; }
     S.stale = 1;
 }
@@ -649,7 +650,7 @@ static void render_if_needed(void) {
     v.screen = S.screen; v.creature = S.creature; v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
     v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url; v.phase = phase(); v.sky = cz_sky();
     v.anim = S.screen == CZ_S_HATCH ? 0 : anim();
-    v.portrait = S.portrait; v.ap = S.ap;
+    v.portrait = S.portrait; v.ap = S.ap; v.ap_pass = S.ap_pass;
     if (S.screen == CZ_S_SETTINGS) {
         v.set_prev = SET_LABEL[(S.sel + SET_N - 1) % SET_N]; v.set_label = SET_LABEL[S.sel];
         v.set_next = SET_LABEL[(S.sel + 1) % SET_N]; v.set_value = setting_value();

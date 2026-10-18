@@ -101,7 +101,7 @@ Everything the host may call is in `citizen.h`, all prefixed `cz_`. The Makefile
 | `unsigned cz_creatures(void)` | The owned mask. |
 | `void cz_set_wifi_list(const char *ssids)` | The host's saved networks, `\n`-separated, at most `CZ_WIFI_NETS` (5) of up to 32 bytes, listed on the WiFi screen. |
 | `int cz_wifi_forget(void)` | After `CZ_REQ_WIFI_FORGET`: the index into the last list to forget, then -1. |
-| `void cz_portal(const char *ap)` | Shows Portal for that access point name; "" or NULL leaves it to the base screen. |
+| `void cz_portal(const char *ap, const char *pass)` | Shows Portal for that access point name and WPA2 password; "" or NULL leaves it to the base screen. |
 
 ### Introspection
 
@@ -148,7 +148,7 @@ Ten screens, `enum cz_screen`. Home and Sulk are the two resting screens; which 
 | `CZ_S_SETTINGS` | Double tap on Home or Sulk (a first tap that fed the pet is undone). | Hold, double tap, the Exit row, or 20 s idle. |
 | `CZ_S_EGG` | `cz_set_creatures` gains a creature. Wobble, crack, burst, then at 2.8 s the new creature with its default name. | 4 s. A tap before 2.8 s jumps to the reveal, after it ends Egg. Messages and check-ins are dropped; it never sleeps. |
 | `CZ_S_WIFI` | Settings, WIFI row. Rows: each saved SSID, ADD NETWORK (raises `CZ_REQ_PORTAL`), BACK. A centre/right tap on an SSID arms TAP TO FORGET; a second one at least 400 ms later raises `CZ_REQ_WIFI_FORGET`. | BACK, hold or 20 s idle return to Settings on the WiFi row. |
-| `CZ_S_PORTAL` | `cz_portal(ap)`: a QR of `WIFI:T:nopass;S:<ap>;;`, banner JOIN <ap> / 192.168.4.1. | Only `cz_portal("")`. Taps, messages and check-ins do nothing; it never sleeps. |
+| `CZ_S_PORTAL` | `cz_portal(ap, pass)`: a QR of `WIFI:T:WPA;S:<ap>;P:<pass>;;`, banner JOIN <ap> / PASS <pass> / 192.168.4.1. | Only `cz_portal("", "")`. Taps, messages and check-ins do nothing; it never sleeps. |
 
 A tap on any event screen (Feed, Play, Talk, QR, Check-in, Sleep) dismisses it to the base screen. Talk and Check-in interrupt whatever is showing, Settings and Sleep included.
 
