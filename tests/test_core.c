@@ -683,8 +683,9 @@ static void test_creatures(void) {
     run(600); check_and_write("egg_burst");                  /* 2,600 ms */
     CHECK(cz_creature() == CZ_TAPIR);
     run(200); CHECK(cz_creature() == CZ_TIGER);              /* 2,800 ms: the new creature, its default name */
-    check_and_write("egg_reveal");
-    run(1150); CHECK(cz_screen() == CZ_S_EGG);
+    check_and_write("egg_silhouette");
+    run(600); check_and_write("egg_reveal");                 /* 3,400 ms */
+    run(550); CHECK(cz_screen() == CZ_S_EGG);
     run(50); CHECK(cz_screen() == CZ_S_HOME);                /* 4,000 ms */
     CHECK(cz_creatures() == (TAPIR | TIGER));
 
