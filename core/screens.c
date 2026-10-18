@@ -181,8 +181,9 @@ int cz_anim(int screen, uint32_t t, uint32_t screen_ms) {
     case CZ_S_TALK: return (s & 1) | ((int)(t / 500) & 1) << 1;                 /* bob, cursor off */
     case CZ_S_SLEEP: return (int)(t / 1200) & 3;                                /* slow breath, zz drift */
     case CZ_S_QR: return (int)(t / 1200) & 1;
-    case CZ_S_EGG: /* 0 still, 1-6 wobble (3 swings x 2 sides), 7-10 crack, 11 flash, 12-13 burst, 16-19 reveal bob */
-        if (screen_ms >= 2800) return 16 | ((int)(t / 600) & 3);
+    case CZ_S_EGG: /* 0 still, 1-6 wobble (3 swings x 2 sides), 7-10 crack, 11 flash, 12-13 burst, 14-15 silhouette, 16-19 reveal bob */
+        if (screen_ms >= 3300) return 16 | ((int)(t / 600) & 3);
+        if (screen_ms >= 2800) return 14 + (int)((screen_ms - 2800) / 250);
         if (screen_ms >= 2400) return 11 + (int)((screen_ms - 2400) / 134);
         if (screen_ms >= 1800) return 7 + (int)((screen_ms - 1800) / 150);
         for (c = 0; c < 3; c++) {
@@ -339,33 +340,64 @@ static void portal(const struct cz_view *v) {
     cz_text("192.168.4.1", CX, 217, CZ_C_DEEP, 2, CZ_CENTER);
 }
 
-/* Egg (hatch.md, Badge): an ink oval in 4 px rows that wobbles, cracks, bursts, then the new creature */
+/* Egg (hatch.md, Badge): an ink oval in 4 px rows that wobbles, cracks, bursts in the new creature's colour, shows
+ * its silhouette, then the creature. v->creature is the hatching one for the whole screen (citizen.c). */
+static const uint8_t TELL[CZ_CREATURES] = {CZ_C_TEAL, CZ_C_GOLD, CZ_C_CORAL}; /* tapir, hornbill, tiger, as on the web */
+
+static void sil(const uint8_t *spr, int x, int y, int c) { /* the sprite at scale 2 in one colour */
+    int sx, sy;
+    for (sy = 0; sy < CZ_SPRITE; sy++)
+        for (sx = 0; sx < CZ_SPRITE; sx++)
+            if (spr[sy * CZ_SPRITE + sx]) cz_rect(x + 2 * sx, y + 2 * sy, 2, 2, c);
+}
+
 static void egg(const struct cz_view *v) {
     static const uint8_t half[20] = {10, 16, 20, 23, 25, 27, 28, 29, 30, 31, 32, 32, 32, 31, 30, 29, 27, 24, 20, 13};
-    static const uint8_t spots[4][2] = {{102, 96}, {130, 88}, {112, 140}, {136, 128}};
+    static const uint8_t spots[4][3] = {{102, 96, 4}, {130, 88, 2}, {112, 140, 15}, {136, 128, 12}}; /* x, y, its row */
     static const int8_t ray[8][2] = {{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
     static const int8_t bits[10][2] = {{9, 4}, {4, 9}, {-5, 8}, {-9, 3}, {-8, -4}, {-3, -10}, {4, -9}, {10, -3}, {-12, -1}, {12, 1}};
-    int a = v->anim, dx = 0, i, x, up;
+    const int tell = TELL[v->creature], a = v->anim;
+    int dx = 0, i, x, y, up, lean;
     skyline(); cz_dim(60);
     if (a >= 16) { /* reveal */
         sprite(v, 56, 44 + BOB[a & 3]);
         banner("NEW CITIZEN", v->name);
         return;
     }
+    if (a >= 14) { /* silhouette: deep with a 2 px rim in the creature's colour, rising a step, in the light it came from */
+        const uint8_t *s = cz_sprite(v->creature, CZ_IDLE);
+        y = 44 - 4 * (a - 14);
+        for (i = 0; i < 8; i++) for (x = 44; x < 112; x += 6) cz_rect(CX + ray[i][0] * x - 1, 112 + ray[i][1] * x - 1, 2, 2, tell);
+        sil(s, 54, y, tell); sil(s, 58, y, tell); sil(s, 56, y - 2, tell); sil(s, 56, y + 2, tell);
+        sil(s, 56, y, CZ_C_DEEP);
+        cz_text("...!?", CX, 200, CZ_C_INK, 3, CZ_CENTER);
+        return;
+    }
     if (a >= 1 && a <= 6) dx = ((a - 1) / 2 + 1) * 2 * ((a - 1) & 1 ? -1 : 1); /* +-2, +-4, +-6 */
     if (a == 11) { cz_rect(0, 0, CZ_W, CZ_H, CZ_C_PALE); return; } /* the break: one full-screen flash */
-    if (a >= 12) { /* burst: 8 thick gold spokes and flying shell bits, growing in 2 steps, behind the shell halves */
+    up = a >= 13 ? 36 : a >= 11 ? 12 * (a - 10) : 0; /* the shell splits: top half lifts, bottom drops, light between */
+    if (!up) { cz_rect(CX - 30, 160, 60, 4, CZ_C_DEEP); cz_rect(CX - 20, 158, 40, 8, CZ_C_DEEP); } /* ground shadow */
+    if (a >= 12) { /* burst: 8 thick spokes in the creature's colour and flying shell bits, growing in 2 steps */
         int len = 24 * (a - 10);
         for (i = 0; i < 8; i++) {
-            for (x = 8; x < len; x += 2) cz_rect(CX + ray[i][0] * x - 2, 120 + ray[i][1] * x - 2, 4, 4, CZ_C_GOLD);
+            for (x = 8; x < len; x += 2) cz_rect(CX + ray[i][0] * x - 2, 120 + ray[i][1] * x - 2, 4, 4, tell);
             cz_rect(CX + ray[i][0] * len - 4, 120 + ray[i][1] * len - 4, 8, 8, CZ_C_PALE); /* a bright tip on each spoke */
         }
+        y = 120 - up / 4; /* a streak of light in the gap between the halves */
+        cz_rect(CX - 44, y - 6, 88, 12, tell); cz_rect(CX - 56, y - 2, 112, 4, tell); cz_rect(CX - 30, y - 3, 60, 6, CZ_C_PALE);
         for (i = 0; i < 10; i++) /* between the spokes, falling a little each step */
             cz_rect(CX + bits[i][0] * len / 8 - 3, 120 + bits[i][1] * len / 8 + 6 * (a - 11), i % 3 ? 6 : 4, i % 3 ? 6 : 4, i % 4 == 3 ? CZ_C_CORAL : CZ_C_INK);
     }
-    up = a >= 13 ? 36 : a >= 11 ? 12 * (a - 10) : 0; /* the shell splits: top half lifts, bottom drops, light between */
-    for (i = 0; i < 20; i++) cz_rect(CX + dx - half[i], 80 + 4 * i + (i < 10 ? -up : up / 2), 2 * half[i], 4, CZ_C_INK);
-    for (i = 0; i < 4; i++) cz_rect(spots[i][0] + dx, spots[i][1] + (spots[i][1] < 120 ? -up : up / 2), 8, 6, i & 1 ? CZ_C_CORAL : CZ_C_GOLD);
+    /* a 2 px deep outline, then the shell, its right side dithered darker; a wobble leans it with the bottom planted */
+    for (i = 0; i < 20; i++) cz_rect(CX + dx * (19 - i) / 10 - half[i] - 2, 78 + 4 * i + (i < 10 ? -up : up / 2), 2 * half[i] + 4, 8, CZ_C_DEEP);
+    for (i = 0; i < 20; i++) {
+        lean = dx * (19 - i) / 10; y = 80 + 4 * i + (i < 10 ? -up : up / 2); x = CX + lean - half[i];
+        cz_rect(x, y, 2 * half[i], 4, CZ_C_INK);
+        cz_clip(x + half[i] + half[i] / 3, y, half[i] * 2 / 3, 4); cz_dim(13); cz_clip(0, 0, CZ_W, CZ_H);
+        cz_clip(x + 2 * half[i] - 4, y, 4, 4); cz_dim(38); cz_clip(0, 0, CZ_W, CZ_H);
+    }
+    for (i = 0; i < 4; i++)
+        cz_rect(spots[i][0] + dx * (19 - spots[i][2]) / 10, spots[i][1] + (spots[i][1] < 120 ? -up : up / 2), 8, 6, i & 1 ? CZ_C_CORAL : CZ_C_GOLD);
     if (a >= 7 && a < 11) /* the crack: 8 zig-zag segments across the middle, 2 more per step */
         for (i = 0, x = 88; i < 2 * (a - 6); i++, x += 8) line2(x, i & 1 ? 124 : 116, x + 8, i & 1 ? 116 : 124, CZ_C_DEEP);
 }

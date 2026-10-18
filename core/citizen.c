@@ -648,7 +648,8 @@ static void render_if_needed(void) {
     uint32_t k = view_key(), diff = k ^ S.drawn_key;
     int bx, by, bw, bh;
     if (!S.stale && !diff) return;
-    v.screen = S.screen; v.creature = S.creature; v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
+    v.screen = S.screen; v.creature = S.screen == CZ_S_EGG ? S.egg : S.creature; /* the burst wears the hatching one's colour */
+    v.pose = cz_pose(); v.hearts = S.hearts; v.typed = typed_len();
     v.name = S.name; v.prompt = S.prompt; v.msg = S.msg; v.city = S.city; v.url = S.url; v.phase = phase(); v.sky = cz_sky();
     v.anim = S.screen == CZ_S_HATCH ? 0 : anim();
     v.portrait = S.portrait; v.ap = S.ap; v.ap_pass = S.ap_pass;
