@@ -344,9 +344,9 @@ static void portal(const struct cz_view *v) {
  * its silhouette, then the creature. v->creature is the hatching one for the whole screen (citizen.c). */
 static const uint8_t TELL[CZ_CREATURES] = {CZ_C_TEAL, CZ_C_GOLD, CZ_C_CORAL}; /* tapir, hornbill, tiger, as on the web */
 
-static void sil(const uint8_t *spr, int x, int y, int c) { /* the sprite at scale 2 in one colour */
+static void sil(const uint8_t *spr, int x, int y, int c, int top) { /* the sprite at scale 2 in one colour, from row top */
     int sx, sy;
-    for (sy = 0; sy < CZ_SPRITE; sy++)
+    for (sy = top; sy < CZ_SPRITE; sy++)
         for (sx = 0; sx < CZ_SPRITE; sx++)
             if (spr[sy * CZ_SPRITE + sx]) cz_rect(x + 2 * sx, y + 2 * sy, 2, 2, c);
 }
@@ -366,10 +366,11 @@ static void egg(const struct cz_view *v) {
     }
     if (a >= 14) { /* silhouette: deep with a 2 px rim in the creature's colour, rising a step, in the light it came from */
         const uint8_t *s = cz_sprite(v->creature, CZ_IDLE);
+        const int top = v->creature == CZ_TIGER ? 26 : 0; /* the tiger's sprig floats above its ear: no blob in the silhouette */
         y = 44 - 4 * (a - 14);
         for (i = 0; i < 8; i++) for (x = 44; x < 112; x += 6) cz_rect(CX + ray[i][0] * x - 1, 112 + ray[i][1] * x - 1, 2, 2, tell);
-        sil(s, 54, y, tell); sil(s, 58, y, tell); sil(s, 56, y - 2, tell); sil(s, 56, y + 2, tell);
-        sil(s, 56, y, CZ_C_DEEP);
+        sil(s, 54, y, tell, top); sil(s, 58, y, tell, top); sil(s, 56, y - 2, tell, top); sil(s, 56, y + 2, tell, top);
+        sil(s, 56, y, CZ_C_DEEP, top);
         cz_text("...!?", CX, 200, CZ_C_INK, 3, CZ_CENTER);
         return;
     }
@@ -380,21 +381,20 @@ static void egg(const struct cz_view *v) {
     if (a >= 12) { /* burst: 8 thick spokes in the creature's colour and flying shell bits, growing in 2 steps */
         int len = 24 * (a - 10);
         for (i = 0; i < 8; i++) {
-            for (x = 8; x < len; x += 2) cz_rect(CX + ray[i][0] * x - 2, 120 + ray[i][1] * x - 2, 4, 4, tell);
+            /* the level two start outside the egg, so no bar crosses the gap */
+            for (x = ray[i][1] ? 8 : 40; x < len; x += 2) cz_rect(CX + ray[i][0] * x - 2, 120 + ray[i][1] * x - 2, 4, 4, tell);
             cz_rect(CX + ray[i][0] * len - 4, 120 + ray[i][1] * len - 4, 8, 8, CZ_C_PALE); /* a bright tip on each spoke */
         }
-        y = 120 - up / 4; /* a streak of light in the gap between the halves */
-        cz_rect(CX - 44, y - 6, 88, 12, tell); cz_rect(CX - 56, y - 2, 112, 4, tell); cz_rect(CX - 30, y - 3, 60, 6, CZ_C_PALE);
+        cz_rect(CX - 32, 120 - up / 4 - 1, 64, 2, CZ_C_PALE); /* a thin bright seam in the gap between the halves */
         for (i = 0; i < 10; i++) /* between the spokes, falling a little each step */
             cz_rect(CX + bits[i][0] * len / 8 - 3, 120 + bits[i][1] * len / 8 + 6 * (a - 11), i % 3 ? 6 : 4, i % 3 ? 6 : 4, i % 4 == 3 ? CZ_C_CORAL : CZ_C_INK);
     }
-    /* a 2 px deep outline, then the shell, its right side dithered darker; a wobble leans it with the bottom planted */
+    /* a 2 px deep outline, then the shell, a narrow dithered edge down its right side; a wobble leans it with the bottom planted */
     for (i = 0; i < 20; i++) cz_rect(CX + dx * (19 - i) / 10 - half[i] - 2, 78 + 4 * i + (i < 10 ? -up : up / 2), 2 * half[i] + 4, 8, CZ_C_DEEP);
     for (i = 0; i < 20; i++) {
         lean = dx * (19 - i) / 10; y = 80 + 4 * i + (i < 10 ? -up : up / 2); x = CX + lean - half[i];
         cz_rect(x, y, 2 * half[i], 4, CZ_C_INK);
-        cz_clip(x + half[i] + half[i] / 3, y, half[i] * 2 / 3, 4); cz_dim(13); cz_clip(0, 0, CZ_W, CZ_H);
-        cz_clip(x + 2 * half[i] - 4, y, 4, 4); cz_dim(38); cz_clip(0, 0, CZ_W, CZ_H);
+        cz_clip(x + 2 * half[i] - 6, y, 6, 4); cz_dim(38); cz_clip(0, 0, CZ_W, CZ_H);
     }
     for (i = 0; i < 4; i++)
         cz_rect(spots[i][0] + dx * (19 - spots[i][2]) / 10, spots[i][1] + (spots[i][1] < 120 ? -up : up / 2), 8, 6, i & 1 ? CZ_C_CORAL : CZ_C_GOLD);
