@@ -344,11 +344,22 @@ static void portal(const struct cz_view *v) {
  * its silhouette, then the creature. v->creature is the hatching one for the whole screen (citizen.c). */
 static const uint8_t TELL[CZ_CREATURES] = {CZ_C_TEAL, CZ_C_GOLD, CZ_C_CORAL}; /* tapir, hornbill, tiger, as on the web */
 
-static void sil(const uint8_t *spr, int x, int y, int c, int top) { /* the sprite at scale 2 in one colour, from row top */
-    int sx, sy;
+/* the sprite at scale 2 in one colour, from row top; solid also fills holes (a clear pixel with the sprite on all four sides) */
+static void sil(const uint8_t *spr, int x, int y, int c, int top, int solid) {
+    int sx, sy, r0[CZ_SPRITE], r1[CZ_SPRITE], c0[CZ_SPRITE], c1[CZ_SPRITE];
+    for (sx = 0; sx < CZ_SPRITE; sx++) { r0[sx] = c0[sx] = CZ_SPRITE; r1[sx] = c1[sx] = -1; }
     for (sy = top; sy < CZ_SPRITE; sy++)
         for (sx = 0; sx < CZ_SPRITE; sx++)
-            if (spr[sy * CZ_SPRITE + sx]) cz_rect(x + 2 * sx, y + 2 * sy, 2, 2, c);
+            if (spr[sy * CZ_SPRITE + sx]) {
+                if (sx < r0[sy]) r0[sy] = sx;
+                if (sx > r1[sy]) r1[sy] = sx;
+                if (sy < c0[sx]) c0[sx] = sy;
+                if (sy > c1[sx]) c1[sx] = sy;
+            }
+    for (sy = top; sy < CZ_SPRITE; sy++)
+        for (sx = 0; sx < CZ_SPRITE; sx++)
+            if (spr[sy * CZ_SPRITE + sx] || (solid && r0[sy] < sx && sx < r1[sy] && c0[sx] < sy && sy < c1[sx]))
+                cz_rect(x + 2 * sx, y + 2 * sy, 2, 2, c);
 }
 
 static void egg(const struct cz_view *v) {
@@ -364,13 +375,16 @@ static void egg(const struct cz_view *v) {
         banner("NEW CITIZEN", v->name);
         return;
     }
-    if (a >= 14) { /* silhouette: deep with a 2 px rim in the creature's colour, rising a step, in the light it came from */
+    if (a >= 14) { /* silhouette: solid deep with a 2 px rim in the creature's colour, rising a step, in the light it came from */
         const uint8_t *s = cz_sprite(v->creature, CZ_IDLE);
         const int top = v->creature == CZ_TIGER ? 26 : 0; /* the tiger's sprig floats above its ear: no blob in the silhouette */
         y = 44 - 4 * (a - 14);
+        /* a dithered disc of that light behind it, so the deep body reads as a shape, not the night sky */
+        for (up = -64; up < 64; up += 4) { for (x = 64; x * x + (up + 2) * (up + 2) > 64 * 64; x -= 4) {} cz_rect(CX - x, 112 + up, 2 * x, 4, tell); }
+        cz_clip(CX - 64, 48, 128, 128); cz_dim(62); cz_clip(0, 0, CZ_W, CZ_H);
         for (i = 0; i < 8; i++) for (x = 44; x < 112; x += 6) cz_rect(CX + ray[i][0] * x - 1, 112 + ray[i][1] * x - 1, 2, 2, tell);
-        sil(s, 54, y, tell, top); sil(s, 58, y, tell, top); sil(s, 56, y - 2, tell, top); sil(s, 56, y + 2, tell, top);
-        sil(s, 56, y, CZ_C_DEEP, top);
+        sil(s, 54, y, tell, top, 0); sil(s, 58, y, tell, top, 0); sil(s, 56, y - 2, tell, top, 0); sil(s, 56, y + 2, tell, top, 0);
+        sil(s, 56, y, CZ_C_DEEP, top, 1);
         cz_text("...!?", CX, 200, CZ_C_INK, 3, CZ_CENTER);
         return;
     }
