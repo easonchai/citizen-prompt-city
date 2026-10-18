@@ -719,6 +719,10 @@ static void test_blob_v5(void) {
     cz_init(0, blob, sizeof blob, 0);
     CHECK(cz_screen() == CZ_S_HOME && cz_creatures() == (1u << CZ_TAPIR | 1u << CZ_HORNBILL));
     cz_set_creatures(1u << CZ_TAPIR | 1u << CZ_HORNBILL); CHECK(cz_screen() == CZ_S_HOME); /* boot re-apply is not new */
+    cz_set_creatures(1u << CZ_TIGER); CHECK(cz_screen() == CZ_S_EGG && cz_creature() == CZ_HORNBILL); /* gained, without the one on screen */
+    CHECK(cz_save(blob, sizeof blob) == CZ_SAVE_SIZE);       /* saved mid-egg: still restores */
+    cz_init(0, blob, sizeof blob, 0);
+    CHECK(cz_screen() == CZ_S_HOME && cz_creature() == CZ_HORNBILL);
 
     blob[2] = 4; blob[35] = 0; reseal(blob);                 /* a v4 blob: owns only its creature */
     cz_init(0, blob, sizeof blob, 0);

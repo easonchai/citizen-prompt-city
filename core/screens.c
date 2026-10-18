@@ -181,7 +181,7 @@ int cz_anim(int screen, uint32_t t, uint32_t screen_ms) {
     case CZ_S_TALK: return (s & 1) | ((int)(t / 500) & 1) << 1;                 /* bob, cursor off */
     case CZ_S_SLEEP: return (int)(t / 1200) & 3;                                /* slow breath, zz drift */
     case CZ_S_QR: return (int)(t / 1200) & 1;
-    case CZ_S_EGG: /* 0 still, 1-6 wobble (3 swings x 2 sides), 7-10 crack, 11-13 burst, 16-19 reveal bob */
+    case CZ_S_EGG: /* 0 still, 1-6 wobble (3 swings x 2 sides), 7-10 crack, 11 flash, 12-13 burst, 16-19 reveal bob */
         if (screen_ms >= 2800) return 16 | ((int)(t / 600) & 3);
         if (screen_ms >= 2400) return 11 + (int)((screen_ms - 2400) / 134);
         if (screen_ms >= 1800) return 7 + (int)((screen_ms - 1800) / 150);
@@ -344,6 +344,7 @@ static void egg(const struct cz_view *v) {
     static const uint8_t half[20] = {10, 16, 20, 23, 25, 27, 28, 29, 30, 31, 32, 32, 32, 31, 30, 29, 27, 24, 20, 13};
     static const uint8_t spots[4][2] = {{102, 96}, {130, 88}, {112, 140}, {136, 128}};
     static const int8_t ray[8][2] = {{1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}};
+    static const int8_t bits[10][2] = {{9, 4}, {4, 9}, {-5, 8}, {-9, 3}, {-8, -4}, {-3, -10}, {4, -9}, {10, -3}, {-12, -1}, {12, 1}};
     int a = v->anim, dx = 0, i, x, up;
     skyline(); cz_dim(60);
     if (a >= 16) { /* reveal */
@@ -352,10 +353,15 @@ static void egg(const struct cz_view *v) {
         return;
     }
     if (a >= 1 && a <= 6) dx = ((a - 1) / 2 + 1) * 2 * ((a - 1) & 1 ? -1 : 1); /* +-2, +-4, +-6 */
-    if (a >= 11) { /* burst: 8 gold spokes growing in 3 steps and a ring flash, behind the shell halves */
+    if (a == 11) { cz_rect(0, 0, CZ_W, CZ_H, CZ_C_PALE); return; } /* the break: one full-screen flash */
+    if (a >= 12) { /* burst: 8 thick gold spokes and flying shell bits, growing in 2 steps, behind the shell halves */
         int len = 24 * (a - 10);
-        for (i = 0; i < 8; i++) line2(CX, 120, CX + ray[i][0] * len, 120 + ray[i][1] * len, CZ_C_GOLD);
-        ring2(CX, 120, len + 8, CZ_C_PALE);
+        for (i = 0; i < 8; i++) {
+            for (x = 8; x < len; x += 2) cz_rect(CX + ray[i][0] * x - 2, 120 + ray[i][1] * x - 2, 4, 4, CZ_C_GOLD);
+            cz_rect(CX + ray[i][0] * len - 4, 120 + ray[i][1] * len - 4, 8, 8, CZ_C_PALE); /* a bright tip on each spoke */
+        }
+        for (i = 0; i < 10; i++) /* between the spokes, falling a little each step */
+            cz_rect(CX + bits[i][0] * len / 8 - 3, 120 + bits[i][1] * len / 8 + 6 * (a - 11), i % 3 ? 6 : 4, i % 3 ? 6 : 4, i % 4 == 3 ? CZ_C_CORAL : CZ_C_INK);
     }
     up = a >= 13 ? 36 : a >= 11 ? 12 * (a - 10) : 0; /* the shell splits: top half lifts, bottom drops, light between */
     for (i = 0; i < 20; i++) cz_rect(CX + dx - half[i], 80 + 4 * i + (i < 10 ? -up : up / 2), 2 * half[i], 4, CZ_C_INK);

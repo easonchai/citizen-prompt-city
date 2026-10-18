@@ -360,7 +360,8 @@ int cz_save(uint8_t *out, int cap) {
     for (i = 0; i < NAME_MAX && S.name[i]; i++) out[16 + i] = (uint8_t)S.name[i];
     out[27] = (uint8_t)(S.tz + 12);
     put32(out + 28, S.clock_known ? S.day_ms / 1000 : 0xFFFFFFFFUL);
-    out[32] = (uint8_t)S.sky; out[33] = (uint8_t)S.always_on; out[34] = (uint8_t)S.skies; out[35] = (uint8_t)S.creatures;
+    out[32] = (uint8_t)S.sky; out[33] = (uint8_t)S.always_on; out[34] = (uint8_t)S.skies;
+    out[35] = (uint8_t)(S.creatures | 1u << S.creature); /* during an egg the new mask may not hold the creature still shown; restore() needs it */
     put32(out + CZ_SAVE_SIZE - 4, checksum(out, CZ_SAVE_SIZE - 4));
     return CZ_SAVE_SIZE;
 }

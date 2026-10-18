@@ -244,6 +244,9 @@ static void set_tz(int h) {
   clock_from_system();
 }
 
+static char cmd[160];  // the serial text line being typed (Improv headers only start at its beginning)
+static size_t cmd_len = 0;
+
 // --- WiFi + remote state ---
 #if CZ_WIFI
 static bool wifi_started = false;     // at least one saved network: the connect cycle runs
@@ -771,6 +774,7 @@ static void improv_rpc(const uint8_t *d, int len) {
       int slot = net_add(ssid, pass);
       if (slot < 0) { improv_send1(IMP_ERROR, IMP_ERR_CONNECT); return; }  // 5 saved: forget one first
       net_list();
+      if (portal_open) { improv_send1(IMP_ERROR, IMP_ERR_CONNECT); return; }  // saved; the portal's close tries it
       improv_send1(IMP_STATE, IMP_PROVISIONING);
       wifi_try_slot(slot, 15000);
       imp_wait = true;  // improv_tick answers once it connects or gives up
@@ -810,10 +814,11 @@ static void improv_tick() {
 
 // Improv and the text commands share the port. Bytes that match a prefix of "IMPROV" are held; on a mismatch the
 // held bytes go to the text path, followed by the current one (returns false). After the header the packet owns
-// the bytes through its checksum. Text commands are lower case, so none starts with 'I'.
+// the bytes through its checksum. A header only starts a line; text commands are lower case, so none starts with 'I'.
 static void text_byte(char c);
 static bool improv_byte(uint8_t c) {
   static const char head[] = "IMPROV";
+  if (imp_n == 0 && cmd_len != 0) return false;  // mid-line: "IMPROV" inside a text command is text
   if (imp_n < 6) {
     if (c == (uint8_t)head[imp_n]) { imp_buf[imp_n++] = c; return true; }
     for (int i = 0; i < imp_n; i++) text_byte((char)imp_buf[i]);
@@ -838,8 +843,6 @@ static const bool first_sync_done = true;
 #endif
 
 // --- serial config over USB CDC ---
-static char cmd[160];
-static size_t cmd_len = 0;
 
 static void run_command(char *line) {
   char *arg = strchr(line, ' ');
