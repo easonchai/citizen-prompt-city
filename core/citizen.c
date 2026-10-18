@@ -578,9 +578,10 @@ static const char *setting_value(void) {
         if (S.update[0]) { d = put(d, "NEW ", 4); put(d, S.update, 15); } else put(d, "UP TO DATE", 10);
         break;
     case SET_ABOUT:
-        for (i = 0; S.url[i]; i++) if (S.url[i] == '/') slug = S.url + i + 1;
+        for (i = 0; S.url[i] && S.url[i] != '?'; i++) if (S.url[i] == '/') slug = S.url + i + 1;
         if (S.version[0]) { d = put(d, "V", 1); d = put(d, S.version, 15); d = put(d, " ", 1); }
-        put(d, slug, 16);
+        for (i = 0; slug[i] && slug[i] != '?' && i < 16; i++) {} /* the slug without the QR's "?ref=qr" */
+        put(d, slug, i);
         break;
     default: break;
     }
