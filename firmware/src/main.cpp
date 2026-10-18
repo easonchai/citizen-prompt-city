@@ -530,6 +530,7 @@ static void install_update() {
 
 // F6: poll once right after connecting (or once the connect cycle has failed), then every 60 s while awake,
 // and on the next pass whenever sync_now is set. Every poll ends with cz_set_wifi, which clears the core's SYNCING.
+// Telemetry rides along on syncs and every 10 minutes.
 static void wifi_poll() {
   if (!wifi_started) return;
   bool connected = net_st == NET_UP;
@@ -537,6 +538,7 @@ static void wifi_poll() {
   if (first || sync_now) {
     if (!connected && net_st != NET_WAIT) return;  // still scanning or trying a network
   } else if (millis() - last_poll_ms < 60000) return;
+  bool synced = sync_now;  // wake, reconnect or Settings > Sync: telemetry goes too
   sync_now = false;
   first_sync_done = true;
   last_poll_ms = millis();
@@ -591,13 +593,19 @@ static void wifi_poll() {
     update_checked = true;
     update_check_ms = millis();
   }
+  // F6: the last F3 line on each sync and otherwise every 10 minutes while awake (one a minute woke Postgres all day)
+  static bool tl_sent = false;
+  static uint32_t tl_ms = 0;
+  bool tl_due = synced || !tl_sent || millis() - tl_ms >= 600000UL;
   HTTPClient http;
   http.setTimeout(3000);
-  if (!first && slug.length() && tl_line[0] && http.begin(tls, api + "/telemetry")) {  // F6: last F3 line, once a minute while awake
+  if (!first && tl_due && slug.length() && tl_line[0] && http.begin(tls, api + "/telemetry")) {
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-Badge-Key", prefs.getString("token", ""));  // server answers 401 without it
     http.POST((uint8_t *)tl_line, strlen(tl_line));
     http.end();
+    tl_sent = true;
+    tl_ms = millis();
   }
   cz_set_wifi(net_ssid.c_str(), wifi_cz_state());
 }
@@ -647,12 +655,12 @@ static void run_portal() {
   String ap = ap_name();
   // a fresh WPA2 password each time (12 of 31 unambiguous characters, about 59 bits, too many to crack from a captured
   // handshake inside the window): the home WiFi password never crosses the air in the clear
+  WiFi.mode(WIFI_AP_STA);  // AP for the phone, STA so it can scan; first, so the radio is on before esp_random()
+  WiFi.disconnect();       // a station retrying networks would move the AP's channel
   static const char abc[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   char pw[13];
-  for (int i = 0; i < 12; i++) pw[i] = abc[esp_random() % (sizeof abc - 1)];
+  for (int i = 0; i < 12; i++) pw[i] = abc[esp_random() % (sizeof abc - 1)];  // true RNG only while RF is on (ESP-IDF)
   pw[12] = 0;
-  WiFi.mode(WIFI_AP_STA);  // AP for the phone, STA so it can scan
-  WiFi.disconnect();       // a station retrying networks would move the AP's channel
   WiFi.softAP(ap.c_str(), pw);
   DNSServer dns;
   dns.start(53, "*", WiFi.softAPIP());  // every hostname resolves to 192.168.4.1
@@ -673,7 +681,7 @@ static void run_portal() {
   web.on("/save", HTTP_POST, [&] {
     String ssid = web.arg("ssid"), pass = web.arg("pass");
     if (!ssid.length()) ssid = web.arg("other");
-    if (!ssid.length() || ssid.length() > 32 || pass.length() > 64) {
+    if (!ssid.length() || ssid.length() > 32 || pass.length() > 64 || ssid.indexOf('\n') >= 0) {  // net_list joins SSIDs with '\n'
       web.send(400, "text/plain", "Check the fields and try again.");
       return;
     }
@@ -765,7 +773,7 @@ static void improv_rpc(const uint8_t *d, int len) {
   switch (d[0]) {
     case 0x01: {  // send WiFi settings: ssid_len, ssid, pass_len, pass
       int sl = len > 2 ? d[2] : 0, pl = len > 3 + sl ? d[3 + sl] : -1;
-      if (sl < 1 || sl > 32 || pl < 0 || pl > 64 || 4 + sl + pl != len) { improv_send1(IMP_ERROR, IMP_ERR_INVALID); return; }
+      if (sl < 1 || sl > 32 || pl < 0 || pl > 64 || 4 + sl + pl != len || memchr(d + 3, '\n', sl)) { improv_send1(IMP_ERROR, IMP_ERR_INVALID); return; }
       char ssid[33], pass[65];
       memcpy(ssid, d + 3, sl);
       ssid[sl] = 0;
@@ -818,6 +826,10 @@ static void improv_tick() {
 static void text_byte(char c);
 static bool improv_byte(uint8_t c) {
   static const char head[] = "IMPROV";
+  static uint32_t imp_ms = 0;
+  uint32_t now = millis();
+  if (imp_n && now - imp_ms > 200) imp_n = 0;  // stalled mid-packet: drop it, so later text commands stay text
+  imp_ms = now;
   if (imp_n == 0 && cmd_len != 0) return false;  // mid-line: "IMPROV" inside a text command is text
   if (imp_n < 6) {
     if (c == (uint8_t)head[imp_n]) { imp_buf[imp_n++] = c; return true; }

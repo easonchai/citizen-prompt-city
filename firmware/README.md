@@ -133,7 +133,7 @@ What the badge does with it:
 
 ### Telemetry
 
-The badge prints one JSON line per second on serial, and once a minute while awake (never on the first poll of a wake) POSTs the latest line as `Content-Type: application/json` with the header `X-Badge-Key: <prefs token>` to `<base>/api/c/<slug>/telemetry`. The server stores anything that parses as a JSON object up to 2048 bytes when the key matches the badge's `deviceKey`; a wrong or missing key is a 401, a badge without a key on the server is a 503. `GET ...?n=100` reads the latest rows back for the admin, the owning speaker or the same header.
+The badge prints one JSON line per second on serial, and on every forced sync (wake, reconnect, Settings > Sync) and otherwise every 10 minutes while awake (never on the first poll of a wake) POSTs the latest line as `Content-Type: application/json` with the header `X-Badge-Key: <prefs token>` to `<base>/api/c/<slug>/telemetry`. The server stores anything that parses as a JSON object up to 2048 bytes when the key matches the badge's `deviceKey`; a wrong or missing key is a 401, a badge without a key on the server is a 503. `GET ...?n=100` reads the latest rows back for the admin, the owning speaker or the same header.
 
 ```json
 {"t":123456,"fps":30,"frame_ms":1.52,"push_ms":1.20,"rows":130,"heap":198000,"screen":1,"hearts":3,"wifi":"ok","rssi":-61,"creature":"tiger","sky":"kl"}
