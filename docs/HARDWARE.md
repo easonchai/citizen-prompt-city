@@ -47,7 +47,9 @@ Verified build, 16 Oct 2026 (firmware 1.1.0, `min_spiffs.csv`), `pio run -e citi
 - RAM: 108,956 of 327,680 bytes (33.3%)
 - `firmware.bin`: 1,218,768 bytes
 
-Includes WiFi, HTTP, captive portal, LovyanGFX and all sprites. Firmware 1.3.0 (5 saved networks, portal QR, Improv, Sync, telemetry every 10 minutes) is built (`CZ_VERSION` in `firmware/platformio.ini`) but has not run on a board and is not published for OTA until it has.
+Includes WiFi, HTTP, captive portal, LovyanGFX and all sprites. Firmware 1.3.0 (5 saved networks, portal QR, Improv, Sync, telemetry every 10 minutes) ran on the real boards on 2026-10-19 (display, touch, WiFi setup and sync, sleep and wake, power cut) and is published for OTA and the web flasher.
+
+Board facts from that day: ESP32-C3 rev v0.4 with 4 MB XMC flash and native USB (it enumerates as Espressif's USB JTAG/serial at `/dev/cu.usbmodem*`; there is no CH340, so the leaflet's driver is not needed). It needs a USB-A to USB-C data cable: some bundled cables are charge-only, and a C-to-C cable may not power it.
 
 ## Day-one hardware checks
 

@@ -6,7 +6,7 @@ The host side of the badge: a PlatformIO project on the Arduino framework for th
 
 Facts below come from `platformio.ini`, `src/main.cpp`, `../docs/HARDWARE.md` and `../scripts/check.sh` as of 19 Oct 2026, firmware 1.3.0. The size budget numbers are still the verified 1.1.0 build.
 
-**1.3.0 is built but not published.** It adds 5 saved networks, the portal's join QR, Improv WiFi, Settings > Sync, telemetry every 10 minutes and owned creatures hatching on the badge. Nothing in it has run on a real board, and a published build installs itself over the air, so `pnpm firmware:publish` waits for the hardware test. Production serves 1.2.0.
+**1.3.0 is published** (2026-10-19, after it ran on the real boards). It adds 5 saved networks, the portal's join QR and styled setup pages, Improv WiFi, Settings > Sync, telemetry every 10 minutes, owned creatures hatching on the badge, wider arrow tap areas, and double tap to leave the WiFi list or cancel the portal. A published build installs itself over the air, so publish only builds that have run on a board.
 
 ## Board and pins
 
