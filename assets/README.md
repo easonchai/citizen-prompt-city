@@ -79,11 +79,9 @@ Listing photos in `ref/ws-*.jpg`: the bare board (`ws-bare-1` to `ws-bare-3`), t
 
 ## Film
 
-[citizen-launch-v1.mp4](film/citizen-launch-v1.mp4), 1920x1080, 24 fps, 54 s, 31 MB, silent (no licensed music track yet). How it is made: [../video/README.md](../video/README.md).
 
 ![Poster frame at 10 s: Meet Tenuk](film/poster.png)
 
-Poster frame: `ffmpeg -ss 00:00:10 -i film/citizen-launch-v1.mp4 -frames:v 1 film/poster.png`.
 
 ## Licence
 

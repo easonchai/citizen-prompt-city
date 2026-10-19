@@ -1,6 +1,6 @@
 name: check
-# Only when badge code changes: web/ is type-checked and built by Vercel on every deploy, so a web-only push
-# spends no Actions minutes. Pushes to main and PRs, not every branch push (a PR would otherwise run twice).
+# Only when code or the workflow changes: docs-only pushes
+# spend no Actions minutes.
 on:
   push:
     branches: [main]

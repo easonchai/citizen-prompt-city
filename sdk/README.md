@@ -1,6 +1,6 @@
 # @prmpt/citizen-sdk
 
-A small TypeScript client for the Citizen badge web API (`web/app/api/**`). No dependencies: it uses the global `fetch`, so it runs in Node 18+ and in every browser. Response types match the route handlers; see `web/README.md` for the full route table.
+A small TypeScript client for the Citizen web API ([../API.md](../API.md)). No dependencies: it uses the global `fetch`, so it runs in Node 18+ and in every browser. Response types match the server's routes; [../API.md](../API.md) has the full reference.
 
 The badge firmware (`firmware/src/main.cpp`) is the reference client. It speaks the same three routes in C with `HTTPClient`: `/state` after every wake and every 60 s while awake, `/telemetry` every 10 minutes and on each sync, `/api/firmware/latest` hourly. This package exists for scripts, dashboards and tests, not for the badge.
 
@@ -8,13 +8,13 @@ The badge firmware (`firmware/src/main.cpp`) is the reference client. It speaks 
 
 | Function | Route | Resolves to |
 |---|---|---|
-| `getState(base, slug)` | `GET /api/c/<slug>/state` | `State`: `{ msg, checkin, name, skies, updatedAt, now, error? }` (`skies` is a flat string like `"kl,sg"`) |
+| `getState(base, slug)` | `GET /api/c/<slug>/state` | `State`: `{ msg, checkin, name, skies, creatures, updatedAt, now, error? }` (`skies` and `creatures` are flat strings like `"kl,sg"`) |
 | `sendMessage(base, slug, text)` | `POST /api/c/<slug>/chat` | `{ reply }`, `{ reply: null, refused: true }` or `{ error }` |
 | `postTelemetry (needs the badge device key)(base, slug, json)` | `POST /api/c/<slug>/telemetry` | `{ ok: true }` or `{ error }` |
 | `getTelemetry(base, slug, n = 100)` | `GET /api/c/<slug>/telemetry?n=` | `TelemetryRow[]` (newest first) or `{ error }` |
 | `latestFirmware(base)` | `GET /api/firmware/latest` | `Firmware` or `{ error }` |
 
-`base` is the origin, for example `https://connect.prmpt.city` or `http://localhost:3110`. Error responses resolve (not reject) with the server's `{ error }` body so you can branch on them; only a network failure or a non-JSON body throws. Server rate limits apply: `/state` once per 10 s per slug from each address, `/chat` 20 per hour per slug.
+`base` is the origin, for example `https://connect.prmpt.city` or `http://localhost:3110`. Error responses resolve (not reject) with the server's `{ error }` body so you can branch on them; only a network failure or a non-JSON body throws. Server rate limits apply (per IP at the edge, and `/chat` 20 per hour per citizen); `/state` and the public reads are CDN-cached for 15 to 30 s.
 
 ## Node
 

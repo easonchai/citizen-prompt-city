@@ -1,0 +1,15 @@
+.DS_Store
+.pio/
+node_modules/
+tests/test_core
+tests/bench_core
+tests/soak_core
+tests/out/
+sim/core.wasm
+*.local
+.env*
+.omc/
+.claude/
+.agents/
+skills-lock.json
+codedb.snapshot

@@ -1,4 +1,4 @@
-// Client for the Citizen web API (web/app/api/**). No dependencies: global fetch only (Node 18+, every browser).
+// Client for the Citizen web API (API.md). No dependencies: global fetch only (Node 18+, every browser).
 // Shapes mirror the route handlers; non-2xx responses still resolve to their JSON body ({ error }) so callers
 // can branch on it. Only a network failure or a non-JSON body throws.
 
@@ -8,9 +8,10 @@ export type State = {
   checkin: string; // city of the latest check-in, "" if none
   name: string; // the pet's name, "" on 404 / DB failure
   skies: string; // granted sky unlocks, comma-separated in the order kl,sg,tyo (e.g. "kl,sg"), "" if none
+  creatures: string; // owned creatures, comma-separated (e.g. "tapir,hornbill"), "" if none
   updatedAt: string | null; // ISO time of the later of msg and checkin
   now: string; // server time, ISO
-  error?: string; // "1 poll per 10 s" on 429
+  error?: string; // set on 404 or a server error
 };
 
 /** POST /api/c/<slug>/chat */
