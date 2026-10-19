@@ -15,6 +15,7 @@ This repository is everything that runs on or around the badge: the C core, the 
 | [`sim/`](sim/README.md) | The badge in the browser: the real core in WebAssembly, a hardware model (battery, WiFi, sleep), time controls, and a 3D view of the badge. |
 | [`sdk/`](sdk/README.md) | A dependency-free TypeScript client for the web API. |
 | [`API.md`](API.md) | The web API the badge and the SDK talk to, so you can run your own server. |
+| [`WISHLIST.md`](WISHLIST.md) | What we'd like to build next: a server you can run yourself, an organiser API for QR attendance, plugins, an MCP server. |
 | [`docs/`](docs/) | [Hardware](docs/HARDWARE.md), the [screen gallery](docs/screens/), the [simulator docs](docs/sim/) and a [3D anatomy figure](docs/anatomy/) of the badge in its case. |
 | [`assets/`](assets/README.md) | Sprites, palette, screen exports and renders. |
 | [`kit/`](kit/README.md) | The speaker kit: a printed booklet on how to use the badge. |
