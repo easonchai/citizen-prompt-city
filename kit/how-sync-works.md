@@ -9,7 +9,7 @@ The badge never waits on the web. It pulls news when it is awake and on WiFi, an
    │              prmpt.city database ◄── chat page <base>/c/<slug> ◄── phone scans the QR
    │                    │
    └── Talk screen ◄────┘  next poll sees a new reply
- badge ── WiFi ──► POST <base>/api/c/<slug>/telemetry    (once a minute while awake)
+ badge ── WiFi ──► POST <base>/api/c/<slug>/telemetry    (every 10 min while awake)
  badge ── WiFi ──► GET  <base>/api/firmware/latest       (after the first sync of each wake, then hourly; newer shows in Settings → Update)
 ```
 

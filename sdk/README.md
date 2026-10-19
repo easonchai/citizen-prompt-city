@@ -2,7 +2,7 @@
 
 A small TypeScript client for the Citizen badge web API (`web/app/api/**`). No dependencies: it uses the global `fetch`, so it runs in Node 18+ and in every browser. Response types match the route handlers; see `web/README.md` for the full route table.
 
-The badge firmware (`firmware/src/main.cpp`) is the reference client. It speaks the same three routes in C with `HTTPClient`: `/state` after every wake and every 60 s while awake, `/telemetry` once a minute, `/api/firmware/latest` hourly. This package exists for scripts, dashboards and tests, not for the badge.
+The badge firmware (`firmware/src/main.cpp`) is the reference client. It speaks the same three routes in C with `HTTPClient`: `/state` after every wake and every 60 s while awake, `/telemetry` every 10 minutes and on each sync, `/api/firmware/latest` hourly. This package exists for scripts, dashboards and tests, not for the badge.
 
 ## Functions
 

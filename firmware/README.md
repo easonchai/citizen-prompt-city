@@ -4,7 +4,9 @@ The host side of the badge: a PlatformIO project on the Arduino framework for th
 
 `stub_core.c` is always compiled but is empty once `core/citizen.c` exists (it checks `__has_include`), so a fresh clone builds with no edits here.
 
-Facts below come from `platformio.ini`, `src/main.cpp`, `../docs/HARDWARE.md` and `../scripts/check.sh` as of 16 Oct 2026, firmware 1.1.0.
+Facts below come from `platformio.ini`, `src/main.cpp`, `../docs/HARDWARE.md` and `../scripts/check.sh` as of 19 Oct 2026, firmware 1.3.0. The size budget numbers are still the verified 1.1.0 build.
+
+**1.3.0 is built but not published.** It adds 5 saved networks, the portal's join QR, Improv WiFi, Settings > Sync, telemetry every 10 minutes and owned creatures hatching on the badge. Nothing in it has run on a real board, and a published build installs itself over the air, so `pnpm firmware:publish` waits for the hardware test. Production serves 1.2.0.
 
 ## Board and pins
 
@@ -34,7 +36,7 @@ ESP32-2424S012C, sold as the DIYMORE ESP32-C3 1.28 inch round touch display with
 | Touch INT | 0 | `TOUCH_INT` |
 | BOOT button | 9 | `BOOT_PIN` in `main.cpp` |
 
-Other build flags in `platformio.ini`: `CZ_VERSION` (the running version string, "1.1.0"), `CZ_DEFAULT_BASE` (the server, `https://connect.prmpt.city`), `CZ_RGB_ORDER` and `CZ_ROTATION` (panel orientation, see the checklist), `CZ_LIGHT_SLEEP_FALLBACK` (commented out), and `CZ_WIFI` (defaults to 1 in `main.cpp`; 0 builds a radio-free badge).
+Other build flags in `platformio.ini`: `CZ_VERSION` (the running version string, "1.3.0"), `CZ_DEFAULT_BASE` (the server, `https://connect.prmpt.city`), `CZ_RGB_ORDER` and `CZ_ROTATION` (panel orientation, see the checklist), `CZ_LIGHT_SLEEP_FALLBACK` (commented out), and `CZ_WIFI` (defaults to 1 in `main.cpp`; 0 builds a radio-free badge).
 
 ## Build and flash
 
@@ -92,7 +94,7 @@ Lines over USB CDC at 115200, one command per line, from `run_command` in `main.
 | `stats` | Print the last telemetry line. |
 | `reset` | Clear every preference and the RTC re-fire guards, then restart. The pet hatches again. |
 
-The badge also prints one telemetry JSON line per second on its own (see Sync) and `boot: first frame at N ms` on startup.
+The badge also prints one telemetry JSON line per second on serial on its own (see Sync) and `boot: first frame at N ms` on startup.
 
 ## WiFi: saved networks, portal, Improv
 
@@ -117,10 +119,10 @@ All HTTP goes to `<base>/api/c/<slug>/...` with a 3 s timeout, where `<base>` is
 
 ### State poll
 
-`GET <base>/api/c/<slug>/state`, once right after every connect (or once the connect cycle has failed), then every 60 s while awake, and at once from Settings > Sync. The server rate-limits to one poll per 10 s per slug and answers 429 with an empty state otherwise.
+`GET <base>/api/c/<slug>/state`, once right after every connect (or once the connect cycle has failed), then every 60 s while awake, and at once from Settings > Sync. The server answers from its CDN cache (up to 30 s old) and has no per-badge limiter; a non-200 answer is ignored.
 
 ```json
-{"msg":"<last assistant reply, at most 64 chars>","checkin":"<city or empty>","name":"<badge name>","updatedAt":"<ISO 8601 or null>","now":"2026-10-31T09:41:00.000Z"}
+{"msg":"<last assistant reply, at most 64 chars>","checkin":"<city or empty>","name":"<badge name>","skies":"kl,sg","creatures":"tapir,tiger","updatedAt":"<ISO 8601 or null>","now":"2026-10-31T09:41:00.000Z"}
 ```
 
 What the badge does with it:
@@ -146,7 +148,7 @@ The badge prints one JSON line per second on serial, and on every forced sync (w
 `GET <base>/api/firmware/latest` returns the published `latest.json` plus an absolute download URL:
 
 ```json
-{"version":"1.1.0","file":"firmware-1.1.0.bin","sha256":"<hex>","size":1219040,"publishedAt":"2026-10-16T05:32:44.904Z","url":"https://<host>/firmware/firmware-1.1.0.bin"}
+{"version":"1.2.0","file":"firmware-1.2.0.bin","sha256":"<hex>","size":1223456,"publishedAt":"2026-10-18T16:17:53.198Z","url":"https://connect.prmpt.city/firmware/firmware-1.2.0.bin"}
 ```
 
 The badge reads `version` and `url` only. It checks after the first state poll of every wake and then at most hourly, compares `version` to `CZ_VERSION` as three-part numeric semver, and tells the core (`cz_set_update`) only when the published build is newer. Install happens three ways: automatically, once per wake, when a newer build is known, prefs `autoupd` is 1 (default) and the badge has sat untouched on Home or Sulk for 10 s; from the Settings Update row; or the serial `update` command. `install_update` saves the pet, shows `UPDATING...`, then streams the image into the idle app slot with `HTTPUpdate` over a `WiFiClientSecure` that skips certificate checks, following redirects, and reboots on success. On failure it shows `UPDATE FAILED`. `sha256` from the manifest is not verified by the badge; the ESP-IDF image header and appended hash are still checked before the slot switch.
@@ -177,7 +179,7 @@ Verified build, 16 Oct 2026, firmware 1.1.0 with WiFi, HTTP, captive portal, OTA
 
 The core's share: the framebuffer is 57,600 bytes static, the sprites 98,304 bytes in flash (3 creatures x 8 poses x 64x64), and the push path uses two 3,840-byte line buffers (8 rows of RGB565, ping-pong so DMA overlaps the palette conversion). No 16-bit full-frame buffer is ever allocated.
 
-`scripts/check.sh` enforces the budget. It runs the core tests, soak, bench and wasm build, then `pio run -e citizen`, parses the `RAM:` and `Flash:` lines, and fails if flash exceeds `FLASH_BUDGET` (default 1,700,000 bytes, leaving room to grow inside the slot) or static RAM exceeds `RAM_BUDGET` (default 200,000 bytes). Both are environment variables. Run it before every push; CI runs the same script.
+`scripts/check.sh` enforces the budget. It runs the core tests, soak, bench and wasm build, then `pio run -e citizen`, parses the `RAM:` and `Flash:` lines, and fails if flash exceeds `FLASH_BUDGET` (default 1,700,000 bytes, leaving room to grow inside the slot) or static RAM exceeds `RAM_BUDGET` (default 200,000 bytes). Both are environment variables. Run it before every push; CI runs the same script on pushes to `main` and PRs that touch badge code, capped at 10 minutes.
 
 ## Hardware-day checklist
 

@@ -47,7 +47,7 @@ Verified build, 16 Oct 2026 (firmware 1.1.0, `min_spiffs.csv`), `pio run -e citi
 - RAM: 108,956 of 327,680 bytes (33.3%)
 - `firmware.bin`: 1,218,768 bytes
 
-Includes WiFi, HTTP, captive portal, LovyanGFX and all sprites.
+Includes WiFi, HTTP, captive portal, LovyanGFX and all sprites. Firmware 1.3.0 (5 saved networks, portal QR, Improv, Sync, telemetry every 10 minutes) is built (`CZ_VERSION` in `firmware/platformio.ini`) but has not run on a board and is not published for OTA until it has.
 
 ## Day-one hardware checks
 
