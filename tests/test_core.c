@@ -762,6 +762,20 @@ static void test_wifi_screen(void) {
     down(); right(); CHECK(cz_screen() == CZ_S_SETTINGS);    /* BACK */
     right(); CHECK(cz_screen() == CZ_S_WIFI);                /* back on the WiFi row */
     run(20100); CHECK(cz_screen() == CZ_S_SETTINGS);         /* 20 s idle */
+    right(); CHECK(cz_screen() == CZ_S_WIFI);
+    down(); down();                                          /* ADD NETWORK */
+    quick_tap_at(200, 100); now += 150; quick_tap_at(200, 100); run(450);
+    CHECK(cz_screen() == CZ_S_SETTINGS && cz_host_request() == CZ_REQ_NONE); /* double tap leaves, adds nothing */
+}
+
+/* a tap a little above or below an arrow is the arrow, not a wheel move (Settings opens on BRIGHTNESS) */
+static void test_arrow_zones(void) {
+    boot();
+    open_settings(); CHECK(cz_brightness() == 100);
+    check_and_write("settings_zones");
+    tap_at(30, 150); CHECK(cz_screen() == CZ_S_SETTINGS && cz_brightness() == 40);  /* just below the left arrow */
+    tap_at(206, 58); CHECK(cz_brightness() == 100);                                 /* just above the right arrow */
+    tap_at(120, 150); tap_at(30, 100); CHECK(cz_brightness() == 100);               /* centre column: the wheel moved */
 }
 
 static void test_sync(void) {
@@ -792,8 +806,11 @@ static void test_portal(void) {
             bad += (fb[(py + 2 * m + r * m + m / 2) * CZ_W + px + 2 * m + c * m + m / 2] == CZ_C_DEEP) != qrcodegen_getModule(code, c, r);
     printf("  portal qr: %d modules at %d px, %d wrong\n", n, m, bad);
     CHECK(bad == 0);
-    tap(); hold(); quick_tap(); quick_tap(); run(60000);     /* taps, hold, time: still there, never sleeps */
-    CHECK(cz_screen() == CZ_S_PORTAL && !cz_wants_sleep());
+    tap(); run(60000);                                       /* a tap and time: still there, never sleeps */
+    CHECK(cz_screen() == CZ_S_PORTAL && !cz_wants_sleep() && cz_host_request() == CZ_REQ_NONE);
+    quick_tap(); now += 150; quick_tap();                    /* a double tap asks the host to stop the portal */
+    CHECK(cz_host_request() == CZ_REQ_PORTAL_CANCEL && cz_screen() == CZ_S_PORTAL);
+    hold(); CHECK(cz_host_request() == CZ_REQ_PORTAL_CANCEL); /* so does a hold */
     cz_portal("", ""); CHECK(cz_screen() == CZ_S_HOME);     /* the host leaves it */
     cz_portal("CITIZEN-A1B2C3", "K7QX3MZP9HTA"); cz_portal(NULL, NULL); CHECK(cz_screen() == CZ_S_HOME);
 }
@@ -820,6 +837,7 @@ int main(void) {
     test_portal();
     if (fails) { printf("%d check(s) failed\n", fails); return 1; }
     test_double_tap_undoes_feed();
+    test_arrow_zones();
     printf("all core tests passed\n");
     return 0;
 }

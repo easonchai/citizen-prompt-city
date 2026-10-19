@@ -57,6 +57,7 @@ static struct {
     char ap_pass[16];        /* and its WPA2 password */
     int tap_home; /* the last tap landed on Home or Sulk, so a quick second tap opens Settings */
     int tap_set;  /* the last tap landed on Settings, so a quick second tap leaves it */
+    int tap_scr;  /* the screen the last tap landed on (WiFi list and portal: a quick second tap leaves) */
     int portrait; /* the web page's portrait of the pet: not a device, so no hearts, touch or sleep */
     int pending, pending_dir; uint32_t pending_ms; /* a Settings value tap waits DOUBLE_TAP_MS so a double tap can cancel it */
     /* clock and settings */
@@ -136,6 +137,7 @@ static void clock_add(uint32_t ms) {
 }
 
 static void setting_change(int dir);
+static void wifi_act(uint32_t now);
 
 static void egg_reveal(void) { if (S.creature != S.egg) cz_set_creature(S.egg); }
 /* back from the WiFi list to Settings, on its WIFI row */
@@ -164,9 +166,10 @@ static void advance(uint32_t now) {
     if (S.screen == CZ_S_SETTINGS && S.idle_ms >= SETTINGS_IDLE_MS) go(base_screen());
     if (S.screen == CZ_S_WIFI && S.idle_ms >= SETTINGS_IDLE_MS) wifi_back();
     if (S.armed && now - S.armed_ms >= FORGET_ARM_MS) { S.armed = 0; S.stale = 1; }
-    if (S.pending && (S.screen != CZ_S_SETTINGS || now - S.pending_ms >= DOUBLE_TAP_MS)) {
+    if (S.pending && ((S.screen != CZ_S_SETTINGS && S.screen != CZ_S_WIFI) || now - S.pending_ms >= DOUBLE_TAP_MS)) {
         S.pending = 0;
         if (S.screen == CZ_S_SETTINGS) setting_change(S.pending_dir);
+        else if (S.screen == CZ_S_WIFI) wifi_act(now);
     }
     /* hold fires while the finger is still down */
     if (S.down && !S.consumed && S.maxd < TAP_PX && now - S.t0 >= HOLD_MS) {
@@ -174,6 +177,7 @@ static void advance(uint32_t now) {
         if (S.screen == CZ_S_HOME || S.screen == CZ_S_SULK) go(CZ_S_QR);
         else if (S.screen == CZ_S_SETTINGS) go(base_screen());
         else if (S.screen == CZ_S_WIFI) wifi_back();
+        else if (S.screen == CZ_S_PORTAL) S.reqs |= 1u << CZ_REQ_PORTAL_CANCEL;
     }
 }
 
@@ -199,24 +203,37 @@ static void setting_change(int dir);
 
 /* Settings is a vertical wheel: the row above at y 48, the selected row at 84-108, the row below at 140.
  * Tap the top third to move up, the bottom third to move down, the middle row's left side to change back
- * and its right side (or centre) to change forward or activate. */
+ * and its right side (or centre) to change forward or activate. The arrows' side columns reach further up and
+ * down (SET_SIDE_*), so a tap a little above or below an arrow still counts as the arrow. */
 #define SET_ROW_TOP 70
 #define SET_ROW_BOTTOM 125
+#define SET_SIDE_TOP 45
+#define SET_SIDE_BOTTOM 160
 #define SET_LEFT_X 80
+#define SET_RIGHT_X 160
+static int wheel_move(int x, int y) { /* -1 up, +1 down, 0 the selected row */
+    int side = x < SET_LEFT_X || x > SET_RIGHT_X;
+    if (y < (side ? SET_SIDE_TOP : SET_ROW_TOP)) return -1;
+    return y > (side ? SET_SIDE_BOTTOM : SET_ROW_BOTTOM) ? 1 : 0;
+}
 static void settings_tap(int x, int y, uint32_t now) {
-    if (y < SET_ROW_TOP) S.sel = (S.sel + SET_N - 1) % SET_N;
-    else if (y > SET_ROW_BOTTOM) S.sel = (S.sel + 1) % SET_N;
+    int m = wheel_move(x, y);
+    if (m) S.sel = (S.sel + SET_N + m) % SET_N;
     else { S.pending = 1; S.pending_dir = x < SET_LEFT_X ? -1 : 1; S.pending_ms = now; }
     S.stale = 1;
 }
 
-/* WiFi list: the same wheel; a centre/right tap on a network arms forget, a second one (not a double tap) confirms */
+/* WiFi list: the same wheel; a centre/right tap on a network arms forget, a second one (not a double tap) confirms.
+ * The row action waits DOUBLE_TAP_MS like a Settings value, so a double tap (leave the list) never starts one. */
 static void wifi_tap(int x, int y, uint32_t now) {
-    int rows = S.nets_n + 2;
+    int rows = S.nets_n + 2, m = wheel_move(x, y);
     S.stale = 1;
-    if (y < SET_ROW_TOP) { S.wsel = (S.wsel + rows - 1) % rows; S.armed = 0; return; }
-    if (y > SET_ROW_BOTTOM) { S.wsel = (S.wsel + 1) % rows; S.armed = 0; return; }
+    if (m) { S.wsel = (S.wsel + rows + m) % rows; S.armed = 0; return; }
     if (x < SET_LEFT_X) { S.armed = 0; return; }
+    S.pending = 1; S.pending_ms = now;
+}
+
+static void wifi_act(uint32_t now) {
     if (S.wsel == S.nets_n) S.reqs |= 1u << CZ_REQ_PORTAL;
     else if (S.wsel > S.nets_n) wifi_back();
     else if (S.armed != S.wsel + 1) { S.armed = S.wsel + 1; S.armed_ms = now; }
@@ -241,9 +258,15 @@ static void gesture_tap(int x, int y, uint32_t now) {
         go(base_screen());
         return;
     }
+    if (again && S.tap_scr == S.screen && S.screen == CZ_S_WIFI) { S.tapped = 0; S.pending = 0; wifi_back(); return; }
+    if (again && S.tap_scr == S.screen && S.screen == CZ_S_PORTAL) { /* the host stops the portal; it leaves via cz_portal("") */
+        S.tapped = 0; S.reqs |= 1u << CZ_REQ_PORTAL_CANCEL;
+        return;
+    }
     S.tapped = 1;
     S.tap_home = home;
     S.tap_set = S.screen == CZ_S_SETTINGS;
+    S.tap_scr = S.screen;
     S.last_tap = now;
     if (home) feed();
     else if (S.screen == CZ_S_SETTINGS) settings_tap(x, y, now);
@@ -507,7 +530,7 @@ void cz_set_wifi(const char *ssid, int state) {
 }
 int cz_host_request(void) {
     int r;
-    for (r = CZ_REQ_PORTAL; r <= CZ_REQ_WIFI_FORGET; r++)
+    for (r = CZ_REQ_PORTAL; r <= CZ_REQ_PORTAL_CANCEL; r++)
         if (S.reqs & 1u << r) { S.reqs &= ~(1u << r); return r; }
     return CZ_REQ_NONE;
 }

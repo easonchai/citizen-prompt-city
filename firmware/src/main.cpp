@@ -649,6 +649,25 @@ static String portal_options() {
   return o;
 }
 
+// The portal's pages share one stylesheet (a string in flash, not RAM): the site's navy and gold, phone-sized.
+static const char PORTAL_HEAD[] =
+    "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<title>Citizen WiFi</title><style>"
+    "body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1330;color:#f6f1e4;"
+    "font:16px/1.5 -apple-system,system-ui,sans-serif}"
+    "main{width:min(360px,calc(100vw - 32px));box-sizing:border-box;background:#141c3a;border:1px solid #2a3566;"
+    "border-radius:16px;padding:24px}h1{margin:0 0 6px;font-size:22px;line-height:1.25}p{margin:0 0 8px;color:#b8bdd6}"
+    "label{display:block;margin:18px 0 6px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;"
+    "color:#9aa0bf}select,input,button{width:100%;box-sizing:border-box;font:inherit;border-radius:10px;padding:13px 12px;"
+    "border:1px solid #2a3566;background:#0a0e1f;color:#f6f1e4;-webkit-appearance:none}"
+    "select{padding-right:40px;background-image:linear-gradient(45deg,transparent 50%,#9aa0bf 50%),"
+    "linear-gradient(135deg,#9aa0bf 50%,transparent 50%);background-position:calc(100% - 21px) 52%,calc(100% - 15px) 52%;"
+    "background-size:6px 6px;background-repeat:no-repeat}"
+    "button{margin-top:24px;background:#f0b840;color:#0a0e1f;border:0;font-weight:700}"
+    ".sub{display:inline-block;margin-top:8px;font-size:14px;color:#9aa0bf}a.sub{color:#f0b840}"
+    ".ok{width:56px;height:56px;border-radius:50%;background:#2bb3a3;color:#0a0e1f;display:grid;place-items:center;"
+    "font-size:30px;font-weight:700;margin-bottom:14px}</style><main>";
+
 static void run_portal() {
   if (portal_open) return;
   portal_open = true;
@@ -671,13 +690,16 @@ static void run_portal() {
   web.on("/", HTTP_GET, [&] {
     if (web.hasArg("rescan")) opts = portal_options();
     web.send(200, "text/html",
-             String("<!doctype html><meta name=viewport content='width=device-width'><title>Citizen</title>"
-                    "<form method=post action=/save style='font:18px sans-serif;max-width:320px;margin:auto'>"
-                    "<h2>Citizen WiFi</h2><p>WiFi name<br>"
-                    "<select name=ssid onchange=\"document.getElementById('o').hidden=this.value!=''\">") +
-                 opts + "<option value=''>Other...</option></select> <a href='/?rescan=1'>Rescan</a></p>"
-                 "<p id=o" + (opts.length() ? " hidden" : "") + "><input name=other maxlength=32 placeholder='WiFi name'></p>"
-                 "<p>Password<br><input name=pass type=password maxlength=64></p><button>Save</button></form>");
+             String(PORTAL_HEAD) +
+                 "<h1>Connect your Citizen</h1><p>Pick your WiFi and enter its password. Your badge remembers up to 5 networks.</p>"
+                 "<form method=post action=/save><label for=s>WiFi network</label>"
+                 "<select id=s name=ssid onchange=\"document.getElementById('o').hidden=this.value!=''\">" +
+                 opts + "<option value=''>Other network\u2026</option></select>"
+                 "<a class=sub href='/?rescan=1'>Scan again</a>"
+                 "<div id=o" + (opts.length() ? " hidden" : "") + "><label for=n>Network name</label>"
+                 "<input id=n name=other maxlength=32 autocapitalize=off autocorrect=off></div>"
+                 "<label for=p>Password</label><input id=p name=pass type=password maxlength=64>"
+                 "<button>Save and connect</button></form></main>");
   });
   web.on("/save", HTTP_POST, [&] {
     String ssid = web.arg("ssid"), pass = web.arg("pass");
@@ -686,12 +708,14 @@ static void run_portal() {
       web.send(400, "text/plain", "Check the fields and try again.");
       return;
     }
-    String head = "<meta name=viewport content='width=device-width'><h2>";
     if (net_add(ssid, pass) < 0) {
-      web.send(200, "text/html", head + "This badge already has 5 networks. Forget one in Settings &gt; WiFi first.</h2>");
+      web.send(200, "text/html", String(PORTAL_HEAD) + "<h1>No room for another network</h1><p>This badge already "
+               "remembers 5. On the badge, open Settings &gt; WiFi, forget one, then try again.</p></main>");
       return;
     }
-    web.send(200, "text/html", head + "Saved. Citizen is connecting.</h2>");
+    web.send(200, "text/html", String(PORTAL_HEAD) + "<div class=ok>&#10003;</div><h1>Saved</h1><p>Your Citizen is "
+             "connecting to your WiFi now. You can close this page; your phone will go back to its usual network.</p>"
+             "<p class=sub>The badge shows CONNECTED in Settings &gt; WiFi once it is online.</p></main>");
     saved = true;
   });
   web.onNotFound([&] {  // captive-portal probes (generate_204, hotspot-detect) land here
@@ -707,6 +731,8 @@ static void run_portal() {
     dns.processNextRequest();
     web.handleClient();
     poll_serial();
+    poll_touch();  // a double tap (or hold) on the portal screen cancels it
+    if (cz_host_request() == CZ_REQ_PORTAL_CANCEL) break;
     cz_tick(millis());
     if (cz_dirty_rows(&y0, &y1)) push_rows(y0, y1);
     delay(10);

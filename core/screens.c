@@ -332,6 +332,7 @@ static void portal(const struct cz_view *v) {
     cat(wifi, sizeof wifi, wifi, v->ap_pass);
     cat(wifi, sizeof wifi, wifi, ";;");
     qr_panel(wifi, -1, 0);
+    cz_text("2X TAP TO EXIT", CX, 12, CZ_C_INK, 1, CZ_CENTER);
     cat(join, sizeof join, "JOIN ", v->ap);
     cat(pass, sizeof pass, "PASS ", v->ap_pass);
     cz_rect(0, 188, CZ_W, 52, CZ_C_GOLD);

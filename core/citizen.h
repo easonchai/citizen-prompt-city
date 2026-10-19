@@ -85,7 +85,7 @@ void cz_set_version(const char *running);      /* e.g. "1.1.0" */
 void cz_set_update(const char *available);     /* "" or NULL = up to date */
 void cz_set_wifi(const char *ssid, int state);
 enum cz_request { CZ_REQ_NONE = 0, CZ_REQ_PORTAL, CZ_REQ_CHECK_UPDATE, CZ_REQ_INSTALL_UPDATE, CZ_REQ_FACTORY_RESET,
-                  CZ_REQ_SYNC, CZ_REQ_WIFI_FORGET };
+                  CZ_REQ_SYNC, CZ_REQ_WIFI_FORGET, CZ_REQ_PORTAL_CANCEL };
 int  cz_host_request(void);                    /* returns one pending request and clears it */
 
 /* Creatures the citizen owns (bit per enum cz_creature), from the server's /state. 0 is ignored (nothing known).
