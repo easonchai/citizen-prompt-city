@@ -1,5 +1,13 @@
 name: check
-on: [push, pull_request]
+# Only when badge code changes: web/ is type-checked and built by Vercel on every deploy, so a web-only push
+# spends no Actions minutes. Pushes to main and PRs, not every branch push (a PR would otherwise run twice).
+on:
+  push:
+    branches: [main]
+    paths: [core/**, firmware/**, sim/**, tests/**, scripts/**, Makefile, .github/workflows/**]
+  pull_request:
+    paths: [core/**, firmware/**, sim/**, tests/**, scripts/**, Makefile, .github/workflows/**]
+  workflow_dispatch:
 concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true   # a newer push cancels the older run, so minutes are never spent twice
