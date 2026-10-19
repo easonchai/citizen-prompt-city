@@ -148,7 +148,7 @@ The badge prints one JSON line per second on serial, and on every forced sync (w
 `GET <base>/api/firmware/latest` returns the published `latest.json` plus an absolute download URL:
 
 ```json
-{"version":"1.2.0","file":"firmware-1.2.0.bin","sha256":"<hex>","size":1223456,"publishedAt":"2026-10-18T16:17:53.198Z","url":"https://connect.prmpt.city/firmware/firmware-1.2.0.bin"}
+{"version":"1.3.0","file":"firmware-1.3.0.bin","sha256":"<hex>","size":1239744,"publishedAt":"2026-10-19T…","url":"https://connect.prmpt.city/firmware/firmware-1.3.0.bin"}
 ```
 
 The badge reads `version` and `url` only. It checks after the first state poll of every wake and then at most hourly, compares `version` to `CZ_VERSION` as three-part numeric semver, and tells the core (`cz_set_update`) only when the published build is newer. Install happens three ways: automatically, once per wake, when a newer build is known, prefs `autoupd` is 1 (default) and the badge has sat untouched on Home or Sulk for 10 s; from the Settings Update row; or the serial `update` command. `install_update` saves the pet, shows `UPDATING...`, then streams the image into the idle app slot with `HTTPUpdate` over a `WiFiClientSecure` that skips certificate checks, following redirects, and reboots on success. On failure it shows `UPDATE FAILED`. `sha256` from the manifest is not verified by the badge; the ESP-IDF image header and appended hash are still checked before the slot switch.
