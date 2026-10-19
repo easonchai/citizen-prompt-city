@@ -529,11 +529,110 @@ static void install_update() {
   }
 }
 
-// F6: poll once right after connecting (or once the connect cycle has failed), then every 60 s while awake,
-// and on the next pass whenever sync_now is set. Every poll ends with cz_set_wifi, which clears the core's SYNCING.
-// Telemetry rides along on syncs and every 10 minutes.
+// F6: the sync runs on its own task. A TLS handshake blocks for 1-3 s on this chip, and on the loop that froze touch
+// and the screen once a minute (measured: 1.3-2.8 s per poll). The loop hands the task a job and applies the answer
+// when it is back, so every core and prefs call stays on the loop (neither is thread-safe).
+struct NetJob { String api, base, token, tl; bool state, update, tele; };
+struct NetAnswer { String state, update; };
+static NetJob net_job;
+static NetAnswer net_ans;
+static volatile bool net_busy = false, net_done = false;
+static TaskHandle_t net_task_h;
+static WiFiClientSecure net_tls;  // its own client: Settings > Update still uses `tls` on the loop
+
+static String net_get(const String &url) {
+  HTTPClient http;
+  http.setTimeout(3000);
+  String body;
+  if (http.begin(net_tls, url)) {
+    if (http.GET() == 200) body = http.getString();
+    http.end();
+  }
+  return body;
+}
+
+static void net_task(void *) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    net_ans = NetAnswer();
+    if (net_job.state) net_ans.state = net_get(net_job.api + "/state");
+    if (net_job.update) net_ans.update = net_get(net_job.base + "/api/firmware/latest");
+    if (net_job.tele) {
+      HTTPClient http;
+      http.setTimeout(3000);
+      if (http.begin(net_tls, net_job.api + "/telemetry")) {
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-Badge-Key", net_job.token);  // server answers 401 without it
+        http.POST((uint8_t *)net_job.tl.c_str(), net_job.tl.length());
+        http.end();
+      }
+    }
+    net_done = true;
+    net_busy = false;
+  }
+}
+
+static void apply_state(const String &body) {
+  char buf[CZ_MSG_MAX], upd[sizeof rtc_last_upd];
+  // Fire only when updatedAt / checkin change, or an old message would re-open Talk every poll and wake.
+  if (json_str(body, "updatedAt", upd, sizeof upd) && upd[0] && strcmp(upd, rtc_last_upd)) {
+    strlcpy(rtc_last_upd, upd, sizeof rtc_last_upd);
+    prefs.putString("last_upd", upd);
+    if (json_str(body, "msg", buf, sizeof buf) && buf[0]) cz_message(buf);
+  }
+  if (json_str(body, "checkin", buf, sizeof buf) && buf[0] && strcmp(buf, rtc_last_city)) {
+    strlcpy(rtc_last_city, buf, sizeof rtc_last_city);
+    prefs.putString("last_city", buf);
+    cz_checkin(buf);
+  }
+  // skies and creatures the badge has unlocked; kept in prefs so a badge offline at boot still has them
+  if (json_str(body, "skies", buf, sizeof buf)) {
+    unsigned mask = names_mask(buf, SKY_NAMES, CZ_SKIES);
+    if (mask != prefs.getUInt("skies", 1)) prefs.putUInt("skies", mask);
+    cz_set_skies(mask);
+  }
+  if (json_str(body, "creatures", buf, sizeof buf)) {
+    unsigned mask = names_mask(buf, CREATURE_NAMES, CZ_CREATURES);
+    if (mask != prefs.getUInt("creatures", 0)) prefs.putUInt("creatures", mask);
+    cz_set_creatures(mask);  // a new one hatches; the loop persists the creature it ends on
+  }
+  if (json_str(body, "name", buf, sizeof buf) && buf[0] && prefs.getString("name", "") != buf) {
+    prefs.putString("name", buf);
+    cz_set_name(buf);
+  }
+  // "now": ISO 8601 UTC, e.g. 2026-10-31T09:41:00.000Z. Fallback clock until SNTP syncs.
+  if (!time_valid() && json_str(body, "now", buf, sizeof buf) && strlen(buf) >= 16 && buf[10] == 'T' &&
+      isdigit(buf[11]) && isdigit(buf[12]) && buf[13] == ':' && isdigit(buf[14]) && isdigit(buf[15]))
+    cz_set_clock(local_minute(((buf[11] - '0') * 10 + buf[12] - '0') * 60 + (buf[14] - '0') * 10 + buf[15] - '0'));
+}
+
+static bool apply_update(const String &body) {
+  char ver[16], url[200];
+  if (!json_str(body, "version", ver, sizeof ver) || !json_str(body, "url", url, sizeof url)) return false;
+  bool newer = semver_cmp(ver, CZ_VERSION) > 0;  // never offer an older or equal build
+  update_url = newer ? url : "";
+  cz_set_update(newer ? ver : "");
+  return true;
+}
+
+// Poll once right after connecting (or once the connect cycle has failed), then every 60 s while awake, and on the
+// next pass whenever sync_now is set. Every poll ends with cz_set_wifi, which clears the core's SYNCING.
+// Telemetry rides along on syncs and every 10 minutes; the update check after each wake's first poll, then hourly.
 static void wifi_poll() {
   if (!wifi_started) return;
+  static bool update_checked = false;  // deep sleep reboots, resetting these
+  static uint32_t update_check_ms = 0;
+  static uint32_t net_t0 = 0;
+  if (net_done) {  // the task is back: apply on the loop
+    net_done = false;
+    Serial.printf("{\"sync\":%lu,\"state\":%d}\n", (unsigned long)(millis() - net_t0), net_ans.state.length() > 0);
+    if (net_ans.state.length()) apply_state(net_ans.state);
+    if (net_ans.update.length() && apply_update(net_ans.update)) { update_checked = true; update_check_ms = millis(); }
+    clock_from_system();  // re-anchor to SNTP once a minute
+    first_sync_done = true;
+    cz_set_wifi(net_ssid.c_str(), wifi_cz_state());
+  }
+  if (net_busy) return;
   bool connected = net_st == NET_UP;
   bool first = !first_sync_done;
   if (first || sync_now) {
@@ -541,74 +640,23 @@ static void wifi_poll() {
   } else if (millis() - last_poll_ms < 60000) return;
   bool synced = sync_now;  // wake, reconnect or Settings > Sync: telemetry goes too
   sync_now = false;
-  first_sync_done = true;
   last_poll_ms = millis();
-  if (!connected) { cz_set_wifi(net_ssid.c_str(), wifi_cz_state()); return; }
-  String slug = pref_slug(), api = pref_base() + "/api/c/" + slug;
-  if (slug.length()) {
-    HTTPClient http;
-    http.setTimeout(3000);
-    if (http.begin(tls, api + "/state")) {
-      if (http.GET() == 200) {
-        String body = http.getString();
-        char buf[CZ_MSG_MAX], upd[sizeof rtc_last_upd];
-        // Fire only when updatedAt / checkin change, or an old message would re-open Talk every poll and wake.
-        if (json_str(body, "updatedAt", upd, sizeof upd) && upd[0] && strcmp(upd, rtc_last_upd)) {
-          strlcpy(rtc_last_upd, upd, sizeof rtc_last_upd);
-          prefs.putString("last_upd", upd);
-          if (json_str(body, "msg", buf, sizeof buf) && buf[0]) cz_message(buf);
-        }
-        if (json_str(body, "checkin", buf, sizeof buf) && buf[0] && strcmp(buf, rtc_last_city)) {
-          strlcpy(rtc_last_city, buf, sizeof rtc_last_city);
-          prefs.putString("last_city", buf);
-          cz_checkin(buf);
-        }
-        // skies and creatures the badge has unlocked; kept in prefs so a badge offline at boot still has them
-        if (json_str(body, "skies", buf, sizeof buf)) {
-          unsigned mask = names_mask(buf, SKY_NAMES, CZ_SKIES);
-          if (mask != prefs.getUInt("skies", 1)) prefs.putUInt("skies", mask);
-          cz_set_skies(mask);
-        }
-        if (json_str(body, "creatures", buf, sizeof buf)) {
-          unsigned mask = names_mask(buf, CREATURE_NAMES, CZ_CREATURES);
-          if (mask != prefs.getUInt("creatures", 0)) prefs.putUInt("creatures", mask);
-          cz_set_creatures(mask);  // a new one hatches; the loop persists the creature it ends on
-        }
-        if (json_str(body, "name", buf, sizeof buf) && buf[0] && prefs.getString("name", "") != buf) {
-          prefs.putString("name", buf);
-          cz_set_name(buf);
-        }
-        // "now": ISO 8601 UTC, e.g. 2026-10-31T09:41:00.000Z. Fallback clock until SNTP syncs.
-        if (!time_valid() && json_str(body, "now", buf, sizeof buf) && strlen(buf) >= 16 && buf[10] == 'T' &&
-            isdigit(buf[11]) && isdigit(buf[12]) && buf[13] == ':' && isdigit(buf[14]) && isdigit(buf[15]))
-          cz_set_clock(local_minute(((buf[11] - '0') * 10 + buf[12] - '0') * 60 + (buf[14] - '0') * 10 + buf[15] - '0'));
-      }
-      http.end();
-    }
-  }
-  clock_from_system();  // re-anchor to SNTP once a minute
-  // F11: after the first state poll of each wake (deep sleep reboots, resetting these), then at most hourly.
-  static bool update_checked = false;
-  static uint32_t update_check_ms = 0;
-  if ((!update_checked || millis() - update_check_ms >= 3600000UL) && check_update()) {
-    update_checked = true;
-    update_check_ms = millis();
-  }
+  if (!connected) { first_sync_done = true; cz_set_wifi(net_ssid.c_str(), wifi_cz_state()); return; }
   // F6: the last F3 line on each sync and otherwise every 10 minutes while awake (one a minute woke Postgres all day)
   static bool tl_sent = false;
   static uint32_t tl_ms = 0;
-  bool tl_due = synced || !tl_sent || millis() - tl_ms >= 600000UL;
-  HTTPClient http;
-  http.setTimeout(3000);
-  if (!first && tl_due && slug.length() && tl_line[0] && http.begin(tls, api + "/telemetry")) {
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("X-Badge-Key", prefs.getString("token", ""));  // server answers 401 without it
-    http.POST((uint8_t *)tl_line, strlen(tl_line));
-    http.end();
-    tl_sent = true;
-    tl_ms = millis();
-  }
-  cz_set_wifi(net_ssid.c_str(), wifi_cz_state());
+  String slug = pref_slug();
+  net_job.base = pref_base();
+  net_job.api = net_job.base + "/api/c/" + slug;
+  net_job.token = prefs.getString("token", "");
+  net_job.tl = tl_line;
+  net_job.state = slug.length() > 0;
+  net_job.update = !update_checked || millis() - update_check_ms >= 3600000UL;
+  net_job.tele = !first && (synced || !tl_sent || millis() - tl_ms >= 600000UL) && slug.length() && tl_line[0];
+  if (net_job.tele) { tl_sent = true; tl_ms = millis(); }
+  net_busy = true;
+  net_t0 = millis();
+  xTaskNotifyGive(net_task_h);
 }
 
 // --- F5: captive-portal provisioning. Adds one network, then the badge carries on; 5 min without a save ends it.
@@ -1054,6 +1102,9 @@ void setup() {
 
 #if CZ_WIFI
   tls.setCACert(ROOT_CA);
+  net_tls.setCACert(ROOT_CA);
+  // below the loop's priority (1), so drawing and touch run first; 12 KB covers mbedTLS's handshake
+  xTaskCreate(net_task, "net", 12288, nullptr, 0, &net_task_h);
   wifi_begin();
   if (!pref_slug().length()) Serial.println("no slug: serial 'slug <s>' links this badge");
   // F5: BOOT held for 2 s right after boot opens the portal. Holding it *through* power-on puts the
@@ -1066,17 +1117,31 @@ void setup() {
 #endif
 }
 
+// A loop section that blocks for longer than SLOW_MS freezes touch and the screen; log which one and how long.
+#define SLOW_MS 80
+static uint32_t slow_t;
+static void slow(const char *what) {
+  uint32_t ms = (micros() - slow_t) / 1000;
+  if (ms >= SLOW_MS) Serial.printf("{\"slow\":\"%s\",\"ms\":%lu}\n", what, (unsigned long)ms);
+  slow_t = micros();
+}
+
 void loop() {
   static uint32_t next_frame_ms = millis();  // static per-frame timer: one pass every 16 ms
+  slow_t = micros();
   poll_serial();
   poll_touch();
+  slow("input");
   uint32_t t0 = micros();
   cz_tick(millis());  // the core renders inside tick
   uint32_t tick_us = micros() - t0;
+  slow("tick");
 #if CZ_WIFI
   wifi_step();
+  slow("wifi_step");
   improv_tick();
   wifi_poll();  // outside frame_ms: an HTTP sync is a radio burst, not frame work
+  slow("wifi_poll");
   switch (cz_host_request()) {  // F8: actions picked in Settings
     case CZ_REQ_PORTAL: run_portal(); break;  // blocks until a network is saved or 5 min pass
     case CZ_REQ_CHECK_UPDATE: check_update(); break;
@@ -1084,6 +1149,7 @@ void loop() {
     case CZ_REQ_SYNC: sync_now = true; if (!wifi_started) cz_set_wifi("", CZ_WIFI_OFF); break;  // nothing to poll: clear SYNCING
     case CZ_REQ_WIFI_FORGET: { int i = cz_wifi_forget(); if (i >= 0) net_forget(i); } break;
   }
+  slow("request");
   // F11: a newer build is waiting (update_url set by check_update) and the badge sat idle on Home/Sulk for 10 s.
   // One try per wake so a failed download cannot loop; Settings -> Update stays the manual path.
   static bool auto_tried = false;
@@ -1102,6 +1168,7 @@ void loop() {
     prefs.putInt("creature", known_creature);
     prefs.putString("name", (const char *)blob + 16);
     save_now();
+    slow("save_creature");
   }
   // Settings -> Brightness, Screen, Sky: all live in the save blob, so write it now
   if (cz_brightness() != known_brightness || cz_always_on() != known_always_on || cz_sky() != known_sky) {
@@ -1110,6 +1177,7 @@ void loop() {
     known_sky = cz_sky();
     save_now();
   }
+  slow("persist");
   int y0, y1;
   if (cz_dirty_rows(&y0, &y1)) {
     uint32_t p0 = micros();
